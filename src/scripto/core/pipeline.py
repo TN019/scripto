@@ -131,6 +131,15 @@ class Pipeline:
         if self._translate_stage is not None and not translate_now and not stop.is_set():
             self._run_deferred_translations(deferred_translations, stop)
 
+        if self._translate_stage is not None:
+            # Let the stage evict its model (Ollama keep_alive=0) — memory hygiene.
+            release = getattr(self._translate_stage, "release", None)
+            if callable(release):
+                try:
+                    release()
+                except Exception:
+                    logger.debug("translate stage release failed", exc_info=True)
+
         for job in jobs:
             if job.status == JobStatus.PENDING:
                 job.status = JobStatus.UNPROCESSED
@@ -321,6 +330,8 @@ class Pipeline:
             job.outputs.extend(produced)
             job.status = previous
             self._emit_status(job)
+            if produced:
+                self._record_translation(job, produced)
         except OperationStopped:
             job.status = previous
             self._emit_status(job)
@@ -341,6 +352,28 @@ class Pipeline:
         self._emit_status(job)
         self._record(job)
         logger.warning("job failed: %s — %s", job.source, reason)
+
+    def _record_translation(self, job: Job, produced: list[Path]) -> None:
+        stage = self._translate_stage
+        try:
+            self._history.append(
+                HistoryEntry(
+                    source=str(job.source),
+                    outputs=[
+                        {
+                            "lang": getattr(stage, "target_code", ""),
+                            "format": path.suffix.lstrip("."),
+                            "path": str(path),
+                        }
+                        for path in produced
+                    ],
+                    model=getattr(stage, "label", "translator"),
+                    engine="translate",
+                    status="done",
+                )
+            )
+        except Exception:
+            logger.exception("could not write translation history entry")
 
     def _record(self, job: Job, duration: float = 0.0) -> None:
         try:
