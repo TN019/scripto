@@ -27,7 +27,7 @@ from typing import Protocol
 
 from ..engines.base import TranscribeEngine
 from ..engines.models import WhisperModelSpec
-from ..media import ffmpeg
+from ..media import access, ffmpeg
 from .errors import OperationStopped, ScriptoError
 from .events import BatchEvent, EventBus, ProgressEvent, StatusEvent
 from .history import HistoryEntry, HistoryStore
@@ -163,6 +163,7 @@ class Pipeline:
                 job.status = JobStatus.EXTRACTING
                 self._emit_status(job)
                 try:
+                    access.check_readable(job.source)
                     wav = ffmpeg.extract_audio(
                         job.source,
                         cache_dir=self._s.cache_dir,
