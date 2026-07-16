@@ -47,6 +47,11 @@ def build_parser(i18n: I18n) -> argparse.ArgumentParser:
     run.add_argument("--overwrite", action="store_true", default=None)
     run.add_argument("--no-recursive", dest="recursive", action="store_false", default=None)
     run.add_argument("--export", dest="export_dir", default=None, help="collect outputs here instead of next to sources")
+    run.add_argument("--translate", action="store_true", default=None,
+                     help="also translate subtitles via local Ollama")
+    run.add_argument("--no-translate", dest="translate", action="store_false")
+    run.add_argument("--target", default=None, choices=["zh", "en"],
+                     help="translation target language")
     return parser
 
 
@@ -82,6 +87,33 @@ def run_batch(args: argparse.Namespace, config_service: ConfigService, i18n: I18
     engine_name, _reason = resolve_engine_name(config["engine"])
     print(i18n.t("run.engine", engine=engine_name, model=model_key, fmt=fmt))
 
+    # Translation stage (M4): only for srt output and a reachable Ollama;
+    # anything else degrades to transcription-only with a clear message.
+    do_translate = (
+        config["translate_enabled"] if args.translate is None else args.translate
+    )
+    target = args.target or config["translate_target"]
+    translate_stage = None
+    if do_translate and fmt != "srt":
+        print(i18n.t("run.translate_needs_srt"))
+    elif do_translate:
+        from .translate.ollama import OllamaClient
+        from .translate.stage import OllamaTranslateStage
+
+        client = OllamaClient(config["ollama_url"])
+        if not client.is_reachable():
+            print(i18n.t("run.ollama_unreachable", url=config["ollama_url"]))
+        else:
+            translate_stage = OllamaTranslateStage(
+                client,
+                model=config["ollama_model"],
+                target=target,
+                overwrite=overwrite,
+                batch_blocks=int(config["translate_batch_blocks"]),
+                batch_max_chars=int(config["translate_batch_max_chars"]),
+            )
+            print(i18n.t("run.translate_on", model=config["ollama_model"], target=target))
+
     bus = EventBus()
     total = len(result.files)
     names = {job_id: src.name for job_id, src in enumerate(result.files, start=1)}
@@ -113,6 +145,7 @@ def run_batch(args: argparse.Namespace, config_service: ConfigService, i18n: I18
         bus=bus,
         history=HistoryStore(),
         settings=settings,
+        translate_stage=translate_stage,
     )
 
     stop = threading.Event()
