@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# uv / virtualenv
+.venv/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+
+# OS noise
+.DS_Store
+
+# Local runtime artifacts (app state lives in the platform data dir, not here)
+log/
+*.log
