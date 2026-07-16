@@ -12,4 +12,10 @@ CATALOG: dict[str, str] = {
     "cli.info.log_dir": "Logs dir:    {path}",
     "cli.info.language": "UI language: {value}",
     "cli.language.not_set": "(not set, defaulting to English)",
+    "errors.ffmpeg_missing": "ffmpeg not found. Install it with: {hint}",
+    "errors.ffmpeg_failed": "ffmpeg could not read {name}: {reason}",
+    "errors.extract_timeout": "Audio extraction timed out after {seconds}s on {name}.",
+    "errors.unknown_model": "Unknown whisper model: {model}",
+    "errors.unknown_engine": "Unknown transcription engine: {engine}",
+    "errors.no_engine": "No transcription engine is available. Run `uv sync` to install dependencies.",
 }

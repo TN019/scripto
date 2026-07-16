@@ -12,4 +12,10 @@ CATALOG: dict[str, str] = {
     "cli.info.log_dir": "日志目录： {path}",
     "cli.info.language": "界面语言： {value}",
     "cli.language.not_set": "（未设置，默认英文）",
+    "errors.ffmpeg_missing": "未找到 ffmpeg。请安装：{hint}",
+    "errors.ffmpeg_failed": "ffmpeg 无法读取 {name}：{reason}",
+    "errors.extract_timeout": "{name} 的音频提取超时（{seconds} 秒）。",
+    "errors.unknown_model": "未知的 whisper 模型：{model}",
+    "errors.unknown_engine": "未知的转录引擎：{engine}",
+    "errors.no_engine": "没有可用的转录引擎。请运行 `uv sync` 安装依赖。",
 }

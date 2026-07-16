@@ -40,3 +40,10 @@ def log_dir() -> Path:
     path = data_dir() / "logs"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def cache_dir() -> Path:
+    """Temporary extracted audio lives here — never next to the user's media."""
+    path = data_dir() / "cache"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
