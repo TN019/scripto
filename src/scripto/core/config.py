@@ -32,6 +32,8 @@ DEFAULTS: dict[str, Any] = {
     "translate_target": "zh",
     "ollama_url": "http://localhost:11434",
     "ollama_model": "qwen3:8b",
+    "translate_batch_blocks": 40,
+    "translate_batch_max_chars": 3000,
     # Pipeline
     "memory_mode": "balanced",       # balanced | low
     # Output (R4): None = write next to the source file

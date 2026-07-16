@@ -16,8 +16,9 @@ import json
 from pathlib import Path
 
 from ..engines.base import TranscribeResult
+from .languages import suffix_map
 
-DEFAULT_SUFFIXES = {"en": ".en", "zh": ".cn"}
+DEFAULT_SUFFIXES = suffix_map()  # single source of truth: core/languages.py
 FORMATS = ("srt", "txt", "vtt", "json")
 
 
