@@ -38,6 +38,7 @@ def build_parser(i18n: I18n) -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command")
     subparsers.add_parser("info", help=i18n.t("cli.info.help"))
+    subparsers.add_parser("doctor", help=i18n.t("cli.doctor.help"))
 
     run = subparsers.add_parser("run", help=i18n.t("cli.run.help"))
     run.add_argument("inputs", nargs="+", help="media files and/or folders")
@@ -64,6 +65,28 @@ def run_info(config_service: ConfigService, i18n: I18n) -> int:
     print(i18n.t("cli.info.log_dir", path=paths.log_dir()))
     print(i18n.t("cli.info.language", value=language))
     return 0
+
+
+def run_doctor_cmd(config_service: ConfigService, i18n: I18n) -> int:
+    from .core.doctor import doctor_ok, run_doctor
+
+    results = run_doctor(config_service.load())
+    print(i18n.t("doctor.header"))
+    for result in results:
+        if result.ok:
+            mark, verdict = "✓", i18n.t("doctor.ok")
+        elif result.required:
+            mark, verdict = "✗", i18n.t("doctor.fail")
+        else:
+            mark, verdict = "!", i18n.t("doctor.warn")
+        name = i18n.t(f"doctor.{result.key}", detail=result.detail)
+        detail = f"  ({result.detail})" if result.ok and result.detail else ""
+        print(f"  {mark} {name}: {verdict}{detail}")
+        if not result.ok and result.hint:
+            print(i18n.t("doctor.fix", hint=result.hint))
+    ok = doctor_ok(results)
+    print(i18n.t("doctor.all_good" if ok else "doctor.has_problems"))
+    return 0 if ok else 1
 
 
 def run_batch(args: argparse.Namespace, config_service: ConfigService, i18n: I18n) -> int:
@@ -187,6 +210,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "info":
             return run_info(config_service, i18n)
+        if args.command == "doctor":
+            return run_doctor_cmd(config_service, i18n)
         if args.command == "run":
             return run_batch(args, config_service, i18n)
     except ScriptoError as exc:

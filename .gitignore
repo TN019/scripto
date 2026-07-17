@@ -18,3 +18,4 @@ build/
 # Local runtime artifacts (app state lives in the platform data dir, not here)
 log/
 *.log
+dist/
