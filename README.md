@@ -81,4 +81,8 @@ SCRIPTO_ENGINE_SMOKE=1 uv run pytest           # + 真实引擎冒烟（下载 t
 SCRIPTO_OLLAMA_SMOKE=1 uv run pytest           # + 真实 Ollama 翻译冒烟
 ```
 
-架构与设计决策见 [docs/PLAN.md](docs/PLAN.md)；路线图在 mingri（蓝图存档 [docs/mingri-plan.md](docs/mingri-plan.md)）。
+架构与设计决策见 [docs/PLAN.md](docs/PLAN.md)；路线图蓝图存档在 [docs/mingri-plan.md](docs/mingri-plan.md)。
+
+## License
+
+[MIT](LICENSE)

@@ -3,6 +3,9 @@ name = "scripto"
 version = "0.1.0"
 description = "Local, free batch audio/video transcription and subtitle translation for macOS and Windows."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "TN019" }]
 requires-python = ">=3.12"
 dependencies = [
     "platformdirs>=4.0",
@@ -12,6 +15,10 @@ dependencies = [
     "mlx-whisper>=0.4.1; sys_platform == 'darwin' and platform_machine == 'arm64'",
     "flet>=0.86.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/TN019/scripto"
+Issues = "https://github.com/TN019/scripto/issues"
 
 [project.scripts]
 scripto = "scripto.app:main"
