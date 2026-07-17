@@ -1,17 +1,27 @@
-"""`scripto` entry point — the desktop GUI (placeholder until milestone M5)."""
+"""`scripto` entry point — the desktop GUI.
+
+`SCRIPTO_GUI_WEB=1` serves the same UI over HTTP without opening a window
+(used for headless UI testing); `SCRIPTO_GUI_PORT` picks the port.
+"""
 
 from __future__ import annotations
 
-from .core.config import ConfigService
+import os
+
 from .core.logs import setup_logging
-from .i18n import I18n
 
 
 def main() -> int:
     setup_logging()
-    config_service = ConfigService()
-    i18n = I18n(lambda: config_service.load().get("language", ""))
-    print(i18n.t("app.gui_placeholder"))
+    import flet as ft
+
+    from .gui.app_gui import gui_main
+
+    if os.environ.get("SCRIPTO_GUI_WEB"):
+        port = int(os.environ.get("SCRIPTO_GUI_PORT", "8551"))
+        ft.app(target=gui_main, view=None, port=port)
+    else:
+        ft.app(target=gui_main)
     return 0
 
 
