@@ -31,6 +31,6 @@ def test_no_command_prints_help(capsys):
     assert "scripto-cli" in capsys.readouterr().out
 
 
-def test_gui_placeholder_runs(capsys):
-    assert app.main() == 0
-    assert "M5" in capsys.readouterr().out
+def test_gui_entry_importable():
+    # app.main() launches the Flet GUI; here we only verify the entry exists.
+    assert callable(app.main)
