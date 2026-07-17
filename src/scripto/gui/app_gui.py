@@ -203,6 +203,7 @@ class GuiApp:
         if self.vm.is_first_run():
             self._show_wizard()
         page.run_task(self._ticker)
+        page.run_thread(self._startup_doctor)
 
     def remount(self) -> None:
         self.row_controls.clear()
@@ -675,6 +676,9 @@ class GuiApp:
                     ft.Row(spacing=12, controls=[model_dd, ft.OutlinedButton(
                         t("gui.manage_models"), icon=ft.Icons.CLOUD_DOWNLOAD,
                         on_click=self._open_model_manager,
+                    ), ft.OutlinedButton(
+                        t("gui.doctor_run"), icon=ft.Icons.HEALTH_AND_SAFETY_OUTLINED,
+                        on_click=self._on_run_doctor,
                     )]),
                     ft.Row(spacing=12, controls=[format_dd, tlang_dd, memory_dd]),
                     ft.Row(spacing=12, controls=[ollama_dd]),
@@ -855,6 +859,63 @@ class GuiApp:
 
     def _delete_ollama(self, name: str) -> None:
         self.vm.ollama_client().delete(name)
+
+    # ------------------------------------------------------------------ #
+    # Doctor (M6): startup check + on-demand from Settings
+    # ------------------------------------------------------------------ #
+
+    def _startup_doctor(self) -> None:
+        from ..core.doctor import doctor_ok, run_doctor
+
+        try:
+            results = run_doctor(self.vm.get_config())
+        except Exception:
+            return
+        if not doctor_ok(results):
+            self._toast(self.t("gui.doctor_startup_failed"), ok=False)
+
+    def _on_run_doctor(self, _e: ft.ControlEvent) -> None:
+        rows = ft.Column(spacing=6, tight=True, controls=[
+            ft.ProgressRing(width=18, height=18, stroke_width=2),
+        ])
+        self.page.show_dialog(ft.AlertDialog(
+            title=ft.Text(self.t("gui.doctor_title"), size=15),
+            content=ft.Container(width=520, content=rows),
+            actions=[ft.TextButton(self.t("gui.close"),
+                                   on_click=lambda _e: self.page.pop_dialog())],
+        ))
+        self.page.update()
+
+        def job() -> None:
+            from ..core.doctor import run_doctor
+
+            results = run_doctor(self.vm.get_config())
+            controls: list[ft.Control] = []
+            for result in results:
+                if result.ok:
+                    icon, color = ft.Icons.CHECK_CIRCLE, ft.Colors.GREEN_600
+                elif result.required:
+                    icon, color = ft.Icons.CANCEL, ft.Colors.RED_600
+                else:
+                    icon, color = ft.Icons.WARNING_AMBER, ft.Colors.ORANGE_600
+                name = self.t(f"doctor.{result.key}", detail=result.detail)
+                lines = [ft.Row(spacing=8, controls=[
+                    ft.Icon(icon, size=16, color=color),
+                    ft.Text(name, size=13, expand=True),
+                    ft.Text(result.detail if result.ok else "", size=11,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                            no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, width=180),
+                ])]
+                if not result.ok and result.hint:
+                    lines.append(ft.Text(
+                        result.hint, size=11, font_family="monospace",
+                        color=ft.Colors.ON_SURFACE_VARIANT, selectable=True,
+                    ))
+                controls.append(ft.Column(spacing=2, tight=True, controls=lines))
+            rows.controls = controls
+            self.page.update()
+
+        self.page.run_thread(job)
 
     # ------------------------------------------------------------------ #
     # Misc
