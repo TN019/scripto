@@ -226,7 +226,7 @@ class RecordingStage:
         if self.engine is not None and self.engine_released_before_first_call is None:
             self.engine_released_before_first_call = self.engine.released
         self.calls.append(source.name)
-        produced = srt_path.with_name(srt_path.name.replace(".en.srt", ".cn.srt"))
+        produced = srt_path.with_name(srt_path.name.replace(".en.srt", ".zh.srt"))
         produced.write_text("translated", encoding="utf-8")
         return [produced]
 
@@ -239,7 +239,7 @@ def test_balanced_mode_translates_alongside(tmp_path, fake_extract):
     assert stats.done == 3
     assert len(stage.calls) == 3
     for job in jobs:
-        assert any(p.name.endswith(".cn.srt") for p in job.outputs)
+        assert any(p.name.endswith(".zh.srt") for p in job.outputs)
 
 
 def test_low_memory_mode_translates_after_engine_release(tmp_path, fake_extract):

@@ -73,7 +73,7 @@ def test_happy_path_preserves_structure(tmp_path):
     client = FakeClient()
     stage, src, srt_path = make_stage(client, tmp_path)
     produced = stage.translate(srt_path, src, stop_check=None, progress=None)
-    assert produced == [tmp_path / "talk.cn.srt"]
+    assert produced == [tmp_path / "talk.zh.srt"]
     blocks = srt.parse_srt(produced[0].read_text(encoding="utf-8"))
     original = srt.parse_srt(SAMPLE)
     assert len(blocks) == 3
@@ -104,7 +104,7 @@ def test_single_failure_keeps_original_text(tmp_path):
 def test_existing_output_skipped_without_overwrite(tmp_path):
     client = FakeClient()
     stage, src, srt_path = make_stage(client, tmp_path)
-    existing = tmp_path / "talk.cn.srt"
+    existing = tmp_path / "talk.zh.srt"
     existing.write_text("old", encoding="utf-8")
     produced = stage.translate(srt_path, src, stop_check=None, progress=None)
     assert produced == [existing]
@@ -115,7 +115,7 @@ def test_existing_output_skipped_without_overwrite(tmp_path):
 def test_overwrite_regenerates(tmp_path):
     client = FakeClient()
     stage, src, srt_path = make_stage(client, tmp_path, overwrite=True)
-    (tmp_path / "talk.cn.srt").write_text("old", encoding="utf-8")
+    (tmp_path / "talk.zh.srt").write_text("old", encoding="utf-8")
     produced = stage.translate(srt_path, src, stop_check=None, progress=None)
     assert "「" in produced[0].read_text(encoding="utf-8")
 
@@ -131,7 +131,7 @@ def test_stop_at_batch_boundary(tmp_path):
 
     with pytest.raises(OperationStopped):
         stage.translate(srt_path, src, stop_check=stop_after_first_batch, progress=None)
-    assert not (tmp_path / "talk.cn.srt").exists()  # no half-written output
+    assert not (tmp_path / "talk.zh.srt").exists()  # no half-written output
 
 
 def test_progress_reports_blocks(tmp_path):

@@ -1,7 +1,7 @@
 """Language registry (R3): adding a language is one entry here, zero pipeline changes.
 
 Used by translation (prompt wording, output suffix) and by output naming for
-transcripts. ``suffix`` matches R4 naming: en → lecture.en.srt, zh → lecture.cn.srt.
+transcripts. ``suffix`` matches R4 naming: en → lecture.en.srt, zh → lecture.zh.srt.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from .errors import ScriptoError
 class LanguageSpec:
     code: str          # config value, e.g. "zh"
     prompt_name: str   # name used inside translation prompts
-    suffix: str        # filename suffix, e.g. ".cn"
+    suffix: str        # filename suffix, e.g. ".zh"
 
 
 _REGISTRY: dict[str, LanguageSpec] = {}
@@ -44,4 +44,4 @@ def suffix_map() -> dict[str, str]:
 
 
 register_language(LanguageSpec(code="en", prompt_name="English", suffix=".en"))
-register_language(LanguageSpec(code="zh", prompt_name="Simplified Chinese", suffix=".cn"))
+register_language(LanguageSpec(code="zh", prompt_name="Simplified Chinese", suffix=".zh"))

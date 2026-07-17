@@ -5,7 +5,7 @@ from scripto.core import languages, output
 
 
 def test_builtin_languages():
-    assert languages.get_language("zh").suffix == ".cn"
+    assert languages.get_language("zh").suffix == ".zh"
     assert languages.get_language("en").suffix == ".en"
     assert languages.get_language("zh").prompt_name == "Simplified Chinese"
 

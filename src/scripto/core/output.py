@@ -1,7 +1,7 @@
 """Output rules and writers (R4).
 
 Naming: every product carries a language suffix — ``lecture.en.srt`` for an
-English transcript, ``lecture.cn.srt`` for the Chinese translation. The suffix
+English transcript, ``lecture.zh.srt`` for the Chinese translation. The suffix
 map is configurable; a language with no mapping gets ``.<code>`` so new
 languages work without code changes (R3).
 

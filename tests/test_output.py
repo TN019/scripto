@@ -18,7 +18,7 @@ def _result():
 def test_language_suffix_mapping(tmp_path):
     src = tmp_path / "lecture.mp4"
     assert out.output_path(src, language="en", fmt="srt").name == "lecture.en.srt"
-    assert out.output_path(src, language="zh", fmt="srt").name == "lecture.cn.srt"
+    assert out.output_path(src, language="zh", fmt="srt").name == "lecture.zh.srt"
     # Unmapped language still works (R3 extensibility).
     assert out.output_path(src, language="ja", fmt="srt").name == "lecture.ja.srt"
 
@@ -50,7 +50,7 @@ def test_existing_transcript_forced_language(tmp_path):
 def test_existing_transcript_auto_checks_known_suffixes(tmp_path):
     src = tmp_path / "lecture.mp4"
     assert out.existing_transcript(src, fmt="srt", language=None) is None
-    (tmp_path / "lecture.cn.srt").write_text("x", encoding="utf-8")
+    (tmp_path / "lecture.zh.srt").write_text("x", encoding="utf-8")
     assert out.existing_transcript(src, fmt="srt", language=None) is not None
 
 
