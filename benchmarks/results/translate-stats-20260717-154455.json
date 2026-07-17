@@ -1,0 +1,11 @@
+{
+  "params": {
+    "blocks": 120,
+    "model": "qwen3:4b"
+  },
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "batches": 3,
+  "first_try_rate_pct": 100.0,
+  "elapsed_sec": 126.7,
+  "verdict": "PASS"
+}

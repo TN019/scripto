@@ -1,0 +1,32 @@
+{
+  "params": {
+    "media_dir": "/private/tmp/claude-501/-Users-tn-dev-local-my-transcriptor/b95a46a0-0e10-4559-b11b-3046c4134964/scratchpad/memtest",
+    "model": "tiny",
+    "mode": "balanced",
+    "translate": true,
+    "runs": 1
+  },
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "files": 20,
+  "runs": [
+    {
+      "total_sec": 29.0,
+      "stage_sums_sec": {
+        "extract": 13.61,
+        "transcribe": 3.93,
+        "translate": 27.41
+      },
+      "metric1_target_sec": 27.73,
+      "metric1_overhead_pct": 4.6,
+      "stats": {
+        "total": 20,
+        "done": 20,
+        "skipped": 0,
+        "failed": 0,
+        "unprocessed": 0,
+        "elapsed_sec": 29.0
+      }
+    }
+  ]
+}
