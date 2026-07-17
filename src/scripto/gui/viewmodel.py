@@ -55,6 +55,22 @@ class Snapshot:
 
 
 @dataclass
+class HistoryGroup:
+    """All history knowledge about one source file."""
+    source: str
+    name: str
+    latest_at: str
+    model: str
+    existing: dict[str, str] = field(default_factory=dict)   # lang -> newest existing path
+    missing: list[str] = field(default_factory=list)         # registry langs not produced yet
+    translate_from: str | None = None                        # an existing .srt to translate from
+
+    @property
+    def deleted(self) -> bool:
+        return not self.existing
+
+
+@dataclass
 class DrainResult:
     changed_rows: list[int] = field(default_factory=list)
     log_lines: list[str] = field(default_factory=list)
@@ -311,7 +327,8 @@ class GuiViewModel:
         return not (self.config.load().get("language") or "").strip()
 
     # ------------------------------------------------------------------ #
-    # History (R5)
+    # History (R5): grouped by source file — one entry per file, languages
+    # switchable inside; a missing language can be translated in place.
     # ------------------------------------------------------------------ #
 
     def history_rows(self) -> list[tuple[HistoryEntry, bool]]:
@@ -322,6 +339,73 @@ class GuiViewModel:
             exists = bool(paths) and all(Path(p).exists() for p in paths)
             rows.append((entry, exists))
         return rows
+
+    def history_groups(self) -> list[HistoryGroup]:
+        """One group per source file, newest first; newest path wins per language."""
+        from ..core.languages import known_languages
+
+        groups: dict[str, HistoryGroup] = {}
+        for entry in self.history.entries():  # newest first
+            group = groups.get(entry.source)
+            if group is None:
+                group = HistoryGroup(
+                    source=entry.source,
+                    name=Path(entry.source).name,
+                    latest_at=entry.created_at,
+                    model=entry.model,
+                )
+                groups[entry.source] = group
+            for output in entry.outputs:
+                lang = output.get("lang") or ""
+                path = output.get("path") or ""
+                if lang and path and lang not in group.existing and Path(path).exists():
+                    group.existing[lang] = path
+
+        for group in groups.values():
+            group.translate_from = next(
+                (p for p in group.existing.values() if p.endswith(".srt")), None
+            )
+            if group.translate_from:
+                group.missing = [
+                    spec.code for spec in known_languages()
+                    if spec.code not in group.existing
+                ]
+        return list(groups.values())
+
+    def translate_history(self, group: "HistoryGroup", target: str) -> list[Path]:
+        """Translate an existing history output into ``target`` (blocking —
+        the view runs this on a worker thread); records a history entry."""
+        if not group.translate_from:
+            return []
+        config = self.get_config()
+        client = OllamaClient(config["ollama_url"])
+        stage = OllamaTranslateStage(
+            client,
+            model=config["ollama_model"],
+            target=target,
+            overwrite=False,
+            batch_blocks=int(config["translate_batch_blocks"]),
+            batch_max_chars=int(config["translate_batch_max_chars"]),
+        )
+        try:
+            produced = stage.translate(
+                Path(group.translate_from), Path(group.source),
+                stop_check=None, progress=None,
+            )
+        finally:
+            stage.release()
+        if produced:
+            self.history.append(HistoryEntry(
+                source=group.source,
+                outputs=[
+                    {"lang": target, "format": p.suffix.lstrip("."), "path": str(p)}
+                    for p in produced
+                ],
+                model=stage.label,
+                engine="translate",
+                status="done",
+            ))
+        return produced
 
     def history_clean_missing(self) -> int:
         stale = {e.id for e, exists in self.history_rows() if not exists}

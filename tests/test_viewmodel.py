@@ -163,6 +163,90 @@ def test_history_rows_and_clean(tmp_path):
     assert len(vm.history_rows()) == 1
 
 
+def test_history_groups_merge_languages_per_source(tmp_path):
+    vm = make_vm(tmp_path)
+    en_srt = tmp_path / "talk.en.srt"
+    zh_srt = tmp_path / "talk.zh.srt"
+    en_srt.write_text("1\n00:00:00,000 --> 00:00:01,000\nhi\n", encoding="utf-8")
+    zh_srt.write_text("1\n00:00:00,000 --> 00:00:01,000\n你好\n", encoding="utf-8")
+    source = str(tmp_path / "talk.mp4")
+    vm.history.append(HistoryEntry(
+        source=source, outputs=[{"lang": "en", "format": "srt", "path": str(en_srt)}],
+        model="tiny", engine="mlx", status="done",
+    ))
+    vm.history.append(HistoryEntry(
+        source=source, outputs=[{"lang": "zh", "format": "srt", "path": str(zh_srt)}],
+        model="ollama/qwen3:8b", engine="translate", status="done",
+    ))
+    groups = vm.history_groups()
+    assert len(groups) == 1  # one entry per source file, not per production
+    group = groups[0]
+    assert set(group.existing) == {"en", "zh"}
+    assert group.missing == []
+    assert not group.deleted
+
+
+def test_history_group_offers_missing_language(tmp_path):
+    vm = make_vm(tmp_path)
+    en_srt = tmp_path / "talk.en.srt"
+    en_srt.write_text("1\n00:00:00,000 --> 00:00:01,000\nhi\n", encoding="utf-8")
+    vm.history.append(HistoryEntry(
+        source=str(tmp_path / "talk.mp4"),
+        outputs=[{"lang": "en", "format": "srt", "path": str(en_srt)}],
+        model="tiny", engine="mlx", status="done",
+    ))
+    group = vm.history_groups()[0]
+    assert group.missing == ["zh"]
+    assert group.translate_from == str(en_srt)
+
+
+def test_history_group_deleted_when_all_outputs_gone(tmp_path):
+    vm = make_vm(tmp_path)
+    vm.history.append(HistoryEntry(
+        source="/gone/talk.mp4",
+        outputs=[{"lang": "en", "format": "srt", "path": "/gone/talk.en.srt"}],
+        model="tiny", engine="mlx", status="done",
+    ))
+    group = vm.history_groups()[0]
+    assert group.deleted
+    assert group.missing == []  # nothing to translate from
+
+
+def test_translate_history_produces_and_records(tmp_path, monkeypatch):
+    vm = make_vm(tmp_path)
+    en_srt = tmp_path / "talk.en.srt"
+    en_srt.write_text("1\n00:00:00,000 --> 00:00:01,000\nhi\n", encoding="utf-8")
+    source = str(tmp_path / "talk.mp4")
+    vm.history.append(HistoryEntry(
+        source=source, outputs=[{"lang": "en", "format": "srt", "path": str(en_srt)}],
+        model="tiny", engine="mlx", status="done",
+    ))
+
+    class FakeStage:
+        label = "ollama/fake"
+
+        def __init__(self, *a, **k):
+            pass
+
+        def translate(self, srt_path, src, *, stop_check, progress):
+            out = src.with_name(src.stem + ".zh.srt")
+            out.write_text("1\n00:00:00,000 --> 00:00:01,000\n你好\n", encoding="utf-8")
+            return [out]
+
+        def release(self):
+            pass
+
+    import scripto.gui.viewmodel as vmod
+
+    monkeypatch.setattr(vmod, "OllamaTranslateStage", FakeStage)
+    group = vm.history_groups()[0]
+    produced = vm.translate_history(group, "zh")
+    assert produced and produced[0].name == "talk.zh.srt"
+    regrouped = vm.history_groups()[0]
+    assert set(regrouped.existing) == {"en", "zh"}
+    assert regrouped.missing == []
+
+
 def test_first_run_detection(tmp_path):
     vm = make_vm(tmp_path)
     assert vm.is_first_run()

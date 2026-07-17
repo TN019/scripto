@@ -136,4 +136,8 @@ CATALOG: dict[str, str] = {
     "gui.doctor_run": "运行检查",
     "gui.doctor_title": "环境检查",
     "gui.doctor_startup_failed": "部分必需组件缺失——打开 设置 → 运行检查 查看详情。",
+    "gui.history_view": "查看",
+    "gui.history_translate_to": "翻译成{lang}",
+    "gui.history_translating": "正在翻译成{lang}…",
+    "gui.history_translate_done": "翻译完成。",
 }

@@ -517,25 +517,29 @@ class GuiApp:
             ),
         )
 
+    def _lang_label(self, code: str) -> str:
+        label = self.t(f"tlang_{code}")
+        return code if label == f"tlang_{code}" else label
+
     def _refresh_history(self) -> None:
         t = self.t
-        rows = self.vm.history_rows()
         controls: list[ft.Control] = []
-        for entry, exists in rows:
-            langs = ", ".join(sorted({o.get("lang", "") for o in entry.outputs if o.get("lang")}))
-            subtitle = f"{entry.model} · {langs} · {entry.created_at[:16].replace('T', ' ')}"
-            trailing: list[ft.Control] = []
-            if exists:
-                first = entry.outputs[0]["path"] if entry.outputs else ""
+        for group in self.vm.history_groups():
+            langs = " · ".join(self._lang_label(code) for code in group.existing)
+            subtitle = f"{langs or '—'} · {group.latest_at[:16].replace('T', ' ')}"
+            if group.deleted:
+                trailing: list[ft.Control] = [
+                    ft.Text(t("gui.history_deleted"), size=12,
+                            color=ft.Colors.RED_400, italic=True),
+                ]
+            else:
+                first = next(iter(group.existing.values()))
                 trailing = [
-                    ft.TextButton(t("gui.preview"),
-                                  on_click=lambda _e, p=first: self._show_preview(p)),
+                    ft.TextButton(t("gui.history_view"),
+                                  on_click=lambda _e, g=group: self._open_history_viewer(g)),
                     ft.IconButton(ft.Icons.FOLDER_OPEN, icon_size=16, tooltip=t("gui.reveal"),
                                   on_click=lambda _e, p=first: reveal_in_file_manager(Path(p))),
                 ]
-            else:
-                trailing = [ft.Text(t("gui.history_deleted"), size=12,
-                                    color=ft.Colors.RED_400, italic=True)]
             controls.append(
                 ft.Container(
                     padding=ft.Padding(12, 8, 12, 8),
@@ -547,9 +551,9 @@ class GuiApp:
                             ft.Column(
                                 spacing=2, expand=True,
                                 controls=[
-                                    ft.Text(Path(entry.source).name, size=13, no_wrap=True,
+                                    ft.Text(group.name, size=13, no_wrap=True,
                                             overflow=ft.TextOverflow.ELLIPSIS,
-                                            tooltip=entry.source),
+                                            tooltip=group.source),
                                     ft.Text(subtitle, size=11,
                                             color=ft.Colors.ON_SURFACE_VARIANT),
                                 ],
@@ -573,19 +577,100 @@ class GuiApp:
         self._toast(self.t("gui.history_cleaned", n=removed))
         self._refresh_history()
 
-    def _show_preview(self, path: str) -> None:
-        try:
-            body = self.vm.read_preview(path)
-        except Exception as exc:
-            self._toast(str(exc), ok=False)
-            return
+    def _open_history_viewer(self, group) -> None:
+        """One dialog per source file: switch languages, translate missing ones."""
+        t = self.t
+        state = {"lang": next(iter(group.existing), None), "busy": False}
+        body = ft.Text("", size=12, font_family="monospace", selectable=True)
+        status = ft.Text("", size=12, color=ft.Colors.ON_SURFACE_VARIANT)
+        lang_row = ft.Row(spacing=6, wrap=True)
+
+        def load(lang: str) -> None:
+            state["lang"] = lang
+            try:
+                body.value = self.vm.read_preview(group.existing[lang])
+            except Exception as exc:
+                body.value = str(exc)
+            rebuild()
+            self.page.update()
+
+        def start_translate(lang: str) -> None:
+            if state["busy"]:
+                return
+            state["busy"] = True
+            status.value = t("gui.history_translating", lang=self._lang_label(lang))
+            rebuild()
+            self.page.update()
+
+            def job() -> None:
+                try:
+                    produced = self.vm.translate_history(group, lang)
+                    if produced:
+                        status.value = t("gui.history_translate_done")
+                        state["lang"] = lang
+                    else:
+                        status.value = t("gui.models_failed", reason="no output")
+                except Exception as exc:
+                    status.value = t("gui.models_failed", reason=exc)
+                finally:
+                    state["busy"] = False
+                    if state["lang"] in group.existing:
+                        try:
+                            body.value = self.vm.read_preview(group.existing[state["lang"]])
+                        except Exception:
+                            pass
+                    rebuild()
+                    self._refresh_history()
+                    self.page.update()
+
+            self.page.run_thread(job)
+
+        def rebuild() -> None:
+            buttons: list[ft.Control] = []
+            for code in group.existing:
+                label = self._lang_label(code)
+                if code == state["lang"]:
+                    buttons.append(ft.FilledButton(
+                        label, disabled=state["busy"],
+                        on_click=lambda _e, c=code: load(c),
+                    ))
+                else:
+                    buttons.append(ft.OutlinedButton(
+                        label, disabled=state["busy"],
+                        on_click=lambda _e, c=code: load(c),
+                    ))
+            for code in group.missing:
+                buttons.append(ft.TextButton(
+                    t("gui.history_translate_to", lang=self._lang_label(code)),
+                    icon=ft.Icons.TRANSLATE, disabled=state["busy"],
+                    on_click=lambda _e, c=code: start_translate(c),
+                ))
+            lang_row.controls = buttons
+
+        rebuild()
+        if state["lang"]:
+            try:
+                body.value = self.vm.read_preview(group.existing[state["lang"]])
+            except Exception as exc:
+                body.value = str(exc)
+
         self.page.show_dialog(ft.AlertDialog(
-            title=ft.Text(Path(path).name, size=15),
+            title=ft.Text(group.name, size=15),
             content=ft.Container(
-                width=640, height=420,
+                width=640, height=460,
                 content=ft.Column(
-                    scroll=ft.ScrollMode.AUTO,
-                    controls=[ft.Text(body, size=12, font_family="monospace", selectable=True)],
+                    spacing=8,
+                    controls=[
+                        lang_row,
+                        status,
+                        ft.Container(
+                            expand=True,
+                            content=ft.Column(
+                                scroll=ft.ScrollMode.AUTO,
+                                controls=[body],
+                            ),
+                        ),
+                    ],
                 ),
             ),
             actions=[ft.TextButton(self.t("gui.close"),
