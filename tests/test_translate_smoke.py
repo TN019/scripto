@@ -53,7 +53,7 @@ def test_real_ollama_translation(tmp_path):
     srt_path.write_text(SAMPLE, encoding="utf-8")
 
     produced = stage.translate(srt_path, src, stop_check=None, progress=None)
-    assert produced == [tmp_path / "lecture.cn.srt"]
+    assert produced == [tmp_path / "lecture.zh.srt"]
 
     blocks = srt.parse_srt(produced[0].read_text(encoding="utf-8"))
     original = srt.parse_srt(SAMPLE)

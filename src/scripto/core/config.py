@@ -38,7 +38,7 @@ DEFAULTS: dict[str, Any] = {
     "memory_mode": "balanced",       # balanced | low
     # Output (R4): None = write next to the source file
     "export_dir": None,
-    "lang_suffixes": {"en": ".en", "zh": ".cn"},
+    "lang_suffixes": {"en": ".en", "zh": ".zh"},
 }
 
 

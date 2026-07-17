@@ -45,7 +45,7 @@
 | scanner：多目录混合输入、递归、去重、路径规范化（shell 转义/iCloud） | feat | p0 |
 | 流水线调度器：extract 预提取(有界2) → transcribe 串行 → translate 队列 | feat | p0 |
 | stop/cancel 语义贯穿全部阶段（5 秒内回到空闲） | feat | p0 |
-| 输出规则：同目录默认 / export 可选 / .en.srt .cn.srt 后缀映射 | feat | p0 |
+| 输出规则：同目录默认 / export 可选 / .en.srt .zh.srt 后缀映射 | feat | p0 |
 | 内存模式开关：balanced / low（先转录后翻译） | feat | p1 |
 | 失败记录与单文件容错（不阻断批次） | feat | p1 |
 | 超长文件分段转录 + 时间轴拼接 | feat | p2 |
