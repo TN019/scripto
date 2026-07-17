@@ -136,4 +136,8 @@ CATALOG: dict[str, str] = {
     "gui.doctor_run": "Run check",
     "gui.doctor_title": "Environment check",
     "gui.doctor_startup_failed": "Some required components are missing — open Settings → Run check for details.",
+    "gui.history_view": "View",
+    "gui.history_translate_to": "Translate to {lang}",
+    "gui.history_translating": "Translating to {lang}…",
+    "gui.history_translate_done": "Translation finished.",
 }

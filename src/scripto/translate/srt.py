@@ -101,7 +101,12 @@ def build_single_prompt(text: str, target_language: str) -> str:
 
 
 def strip_think(text: str) -> str:
-    return _THINK_RE.sub("", text).strip()
+    text = _THINK_RE.sub("", text)
+    # Some reasoning models (qwen3 via older Ollama) emit their thinking as
+    # plain text terminated by a lone closing tag — keep only what follows.
+    if "</think>" in text:
+        text = text.rsplit("</think>", 1)[-1]
+    return text.strip()
 
 
 def parse_marker_response(response: str, count: int) -> list[str | None]:

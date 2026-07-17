@@ -58,6 +58,15 @@ def test_marker_response_strips_think_noise():
     assert srt.parse_marker_response(response, 2) == ["译文一", "译文二"]
 
 
+def test_strip_think_handles_closing_tag_only():
+    # qwen3 on older Ollama: reasoning as plain text + lone closing tag
+    response = "Okay, so I need to translate this.\nLet me think.\n</think>\n\n你好，世界。"
+    assert srt.strip_think(response) == "你好，世界。"
+    assert srt.parse_marker_response(
+        "reasoning text…</think>[[1]]\n你好", 1
+    ) == ["你好"]
+
+
 def test_marker_response_missing_and_blank_are_none():
     assert srt.parse_marker_response("[[1]]\nonly one", 3) == ["only one", None, None]
     assert srt.parse_marker_response("[[1]]\n\n[[2]]\nok", 2) == [None, "ok"]
