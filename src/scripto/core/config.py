@@ -36,6 +36,8 @@ DEFAULTS: dict[str, Any] = {
     "translate_batch_max_chars": 3000,
     # Pipeline
     "memory_mode": "balanced",       # balanced | low
+    "segment_threshold_sec": 3600,   # chunk files longer than this (0 = off)
+    "segment_chunk_sec": 1800,
     # Output (R4): None = write next to the source file
     "export_dir": None,
     "lang_suffixes": {"en": ".en", "zh": ".zh"},

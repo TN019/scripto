@@ -66,6 +66,10 @@ class PipelineSettings:
     memory_mode: str = "balanced"           # balanced | low
     cache_dir: Path | None = None
     engine_label: str = ""                  # for history records
+    # Very-long-file segmentation: flatten the per-file memory peak by
+    # transcribing in chunks and stitching timestamps (0 disables).
+    segment_threshold_sec: float = 3600.0
+    segment_chunk_sec: float = 1800.0
 
 
 class Pipeline:
@@ -247,14 +251,7 @@ class Pipeline:
                 if not loaded:
                     self._engine.load(self._s.model)
                     loaded = True
-                result = self._engine.transcribe(
-                    wav,
-                    language=self._s.language,
-                    progress=lambda done, total, j=job: self._bus.emit(
-                        ProgressEvent(scope=f"transcribe:{j.id}", done=int(done), total=int(total))
-                    ),
-                    stop_check=stop.is_set,
-                )
+                result = self._transcribe(wav, job, stop)
                 job.language = result.language or self._s.language
                 target = out.output_path(
                     job.source, language=job.language, fmt=self._s.fmt,
@@ -275,6 +272,61 @@ class Pipeline:
             finally:
                 if wav:
                     wav.unlink(missing_ok=True)
+
+    def _transcribe(self, wav: Path, job: Job, stop: threading.Event):
+        """Transcribe one WAV; very long audio is chunked and re-stitched."""
+        from ..engines.base import Segment, TranscribeResult
+
+        def progress_for(base: float, span: float):
+            def cb(done: float, total: float, j=job) -> None:
+                frac = (done / total) if total else 0.0
+                self._bus.emit(ProgressEvent(
+                    scope=f"transcribe:{j.id}",
+                    done=int((base + span * frac) * 100),
+                    total=100,
+                ))
+            return cb
+
+        threshold = self._s.segment_threshold_sec
+        try:
+            duration = ffmpeg.wav_duration(wav)
+        except Exception:
+            duration = 0.0
+
+        if not threshold or duration <= threshold:
+            return self._engine.transcribe(
+                wav,
+                language=self._s.language,
+                progress=progress_for(0.0, 1.0),
+                stop_check=stop.is_set,
+            )
+
+        chunks = ffmpeg.split_wav(wav, self._s.segment_chunk_sec, self._s.cache_dir)
+        logger.info("segmenting %s (%.0fs) into %d chunks", job.source.name,
+                    duration, len(chunks))
+        merged: list[Segment] = []
+        language = self._s.language
+        offset = 0.0
+        try:
+            for index, chunk in enumerate(chunks):
+                if stop.is_set():
+                    raise OperationStopped()
+                partial = self._engine.transcribe(
+                    chunk,
+                    language=language,
+                    progress=progress_for(index / len(chunks), 1 / len(chunks)),
+                    stop_check=stop.is_set,
+                )
+                merged.extend(
+                    Segment(seg.start + offset, seg.end + offset, seg.text)
+                    for seg in partial.segments
+                )
+                language = language or partial.language
+                offset += ffmpeg.wav_duration(chunk)
+        finally:
+            for chunk in chunks:
+                chunk.unlink(missing_ok=True)
+        return TranscribeResult(segments=merged, language=language, duration=offset)
 
     # ------------------------------------------------------------------ #
     # Stage 3: translation (worker in balanced mode, deferred in low mode)

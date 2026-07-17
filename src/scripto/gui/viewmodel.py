@@ -194,6 +194,8 @@ class GuiViewModel:
             suffix_map=dict(config["lang_suffixes"]),
             memory_mode=config["memory_mode"],
             engine_label=engine_name,
+            segment_threshold_sec=float(config.get("segment_threshold_sec", 3600)),
+            segment_chunk_sec=float(config.get("segment_chunk_sec", 1800)),
         )
         return Pipeline(
             engine=create_engine(config["engine"]),

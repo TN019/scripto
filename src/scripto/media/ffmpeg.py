@@ -126,6 +126,51 @@ def extract_audio(
         stderr_path.unlink(missing_ok=True)
 
 
+def wav_duration(path: Path) -> float:
+    """Duration in seconds of a PCM WAV (the format our extraction produces)."""
+    import wave
+
+    with wave.open(str(path), "rb") as wav:
+        rate = wav.getframerate()
+        return wav.getnframes() / rate if rate else 0.0
+
+
+def split_wav(path: Path, chunk_sec: float, out_dir: Path | None = None) -> list[Path]:
+    """Split a PCM WAV into consecutive chunks of ``chunk_sec`` (last one shorter).
+
+    Streams frame blocks — a multi-GB WAV never sits in memory whole. Caller
+    owns (and deletes) the returned chunk files.
+    """
+    import wave
+
+    directory = out_dir or path.parent
+    chunks: list[Path] = []
+    with wave.open(str(path), "rb") as src_wav:
+        rate = src_wav.getframerate()
+        params = src_wav.getparams()
+        frames_per_chunk = max(1, int(chunk_sec * rate))
+        total = src_wav.getnframes()
+        index = 0
+        read = 0
+        block = rate * 60  # one minute per read keeps memory flat
+        while read < total:
+            chunk_path = directory / f"{path.stem}.part{index:03d}.wav"
+            with wave.open(str(chunk_path), "wb") as out_wav:
+                out_wav.setparams(params)
+                remaining = min(frames_per_chunk, total - read)
+                while remaining > 0:
+                    frames = src_wav.readframes(min(block, remaining))
+                    if not frames:
+                        break
+                    out_wav.writeframes(frames)
+                    got = len(frames) // (params.sampwidth * params.nchannels)
+                    remaining -= got
+                    read += got
+            chunks.append(chunk_path)
+            index += 1
+    return chunks
+
+
 def cleanup_orphans(cache_dir: Path | None = None) -> int:
     """Remove leftover temp files from a previous crash; returns count removed."""
     directory = cache_dir or paths.cache_dir()
