@@ -18,8 +18,19 @@ def main() -> int:
     from .gui.app_gui import gui_main
 
     if os.environ.get("SCRIPTO_GUI_WEB"):
+        # Headless web serving for UI testing (dev-only deps: flet-web, uvicorn).
+        # flet 0.86's ft.app(view=None) opens the desktop socket, not HTTP —
+        # the fastapi integration is the supported web path.
+        import uvicorn
+        import flet_web.fastapi as flet_fastapi
+
         port = int(os.environ.get("SCRIPTO_GUI_PORT", "8551"))
-        ft.app(target=gui_main, view=None, port=port)
+        uvicorn.run(
+            flet_fastapi.app(gui_main),
+            host="127.0.0.1",
+            port=port,
+            log_level="warning",
+        )
     else:
         ft.app(target=gui_main)
     return 0
