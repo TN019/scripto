@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🎬 Scripto
+<img src="assets/icon.png" width="128" alt="Scripto icon" />
+
+# Scripto
 
 **Turn a whole folder of videos into tidy bilingual subtitles — entirely on your own computer.**
 
