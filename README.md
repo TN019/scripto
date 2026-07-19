@@ -67,13 +67,15 @@ From then on, double-click `launchers\Scripto.bat` (or `Scripto.vbs` for no cons
 
 Everything else installs itself on first launch — no Python wrangling.
 
-## 🏭 Why is it fast — and why doesn't it blow up your RAM?
+## 🏭 Why is it fast?
 
-Batch-processing dozens of long videos has two classic failure modes: **slow** and **out of memory**. Scripto's core is a staged pipeline — three stations working simultaneously like a factory line, instead of each file queuing through every step:
+The obvious way to batch videos is one at a time, start to finish: pull the audio → transcribe it → translate it → next file. The catch is that each step leans on a *different* part of your machine — pulling audio is **CPU** work (ffmpeg), transcribing is **GPU / Neural-Engine** work (Whisper), translating is a **separate model** (Ollama). Do them in a line and two of the three sit idle at any moment.
+
+Scripto runs them like an assembly line instead. While the GPU transcribes file #1, the CPU is already pulling audio for file #2, and file #1's transcript is being translated at the same time:
 
 ```mermaid
 flowchart LR
-    A[📁 Scan<br/>files & folders] --> B[🎵 Extract audio<br/>ffmpeg · prefetches next]
+    A[📁 Scan<br/>files & folders] --> B[🎵 Extract audio<br/>ffmpeg · CPU]
     B -->|bounded queue| C[🎙️ Transcribe<br/>Whisper · GPU]
     C -->|bounded queue| D[🌐 Translate<br/>Ollama · in parallel]
     C --> E[📄 lecture.en.srt]
@@ -81,12 +83,15 @@ flowchart LR
     E & F --> G[🕰️ History index]
 ```
 
-- The engine picks itself per platform: mlx-whisper on Apple Silicon (Metal), faster-whisper on Windows (plain CPU works; NVIDIA GPUs accelerate automatically)
-- Three-hour recordings are chunked, transcribed, and re-stitched with seamless timestamps, capping memory
-- On 16 GB machines, *low-memory mode* translates only after transcription finishes — one large model resident at a time
-- Every stage has timeouts and isolation: a broken file gets logged and skipped, never dragging down the batch
+**The expensive part — the GPU transcribing — almost never waits.** That's where the speed comes from. A few deliberate choices keep it fast *and* stable:
 
-These aren't slogans — they're acceptance metrics measured on every release (scripts in [`benchmarks/`](benchmarks/), reproducible by anyone):
+- **Transcription stays one-at-a-time, on purpose.** Running many Whisper jobs at once thrashes memory and ends up *slower* — so Scripto overlaps the *other* stages around one steady transcription stream instead of naively parallelizing everything.
+- **Models load once.** The Whisper model is loaded a single time and reused for the whole batch; Ollama is kept warm between files — no paying the model-load cost per file.
+- **No wasted work.** Files that already have subtitles are skipped instantly; a broken file is logged and stepped over, never stalling the queue.
+- **Long files don't balloon memory.** A three-hour recording is split, transcribed in chunks, and stitched back with seamless timestamps.
+- **Right engine, automatically.** mlx-whisper on Apple Silicon (Metal), faster-whisper on Windows (plain CPU works; NVIDIA GPUs accelerate automatically).
+
+How well does the overlap actually pay off? On a 20-file batch *with* translation, the whole run finished just **4.6% above the theoretical floor** — essentially the time transcription alone would take, with extraction and translation hidden underneath it. Every number below comes from reproducible scripts in [`benchmarks/`](benchmarks/):
 
 | Metric | Target | Measured |
 |---|---|---|
