@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🎬 Scripto
+<img src="assets/icon.png" width="128" alt="Scripto icon" />
+
+# Scripto
 
 **把一整个文件夹的视频，变成整理好的双语字幕——全程在你自己的电脑上。**
 
