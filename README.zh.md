@@ -4,10 +4,7 @@
 
 **把一整个文件夹的视频，变成整理好的双语字幕——全程在你自己的电脑上。**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-4338ca.svg)](LICENSE)
-[![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776ab.svg)](pyproject.toml)
-[![Platform](https://img.shields.io/badge/平台-macOS%20%7C%20Windows-6366f1.svg)](#-快速开始)
-[![Tests](https://img.shields.io/badge/测试-137%20通过-16a34a.svg)](tests/)
+📄 [MIT 许可](LICENSE) &nbsp;·&nbsp; 🐍 Python 3.12+ &nbsp;·&nbsp; 💻 macOS / Windows &nbsp;·&nbsp; 🔒 100% 本地 &nbsp;·&nbsp; ✅ 137 项测试
 
 [English](README.md) | **简体中文**
 
@@ -70,13 +67,15 @@ git clone https://github.com/TN019/scripto.git; cd scripto
 
 其余依赖首次启动时自动安装，不需要手动折腾 Python。
 
-## 🏭 为什么它快、为什么它稳？
+## 🏭 为什么它快？
 
-批量处理几十个长视频，最怕两件事：**慢**和**内存爆**。Scripto 的核心是一条阶段化流水线——三个环节像工厂流水线一样同时开工，而不是一个文件从头排到尾：
+最直觉的批量做法是一个文件从头做到尾：提取音频 → 转录 → 翻译 → 下一个。问题在于这三步各自吃的是电脑**不同的部件**——提取音频是 **CPU**（ffmpeg），转录是 **GPU / 神经引擎**（Whisper），翻译是**另一个模型**（Ollama）。排成一条线做，任何时刻都有两个部件在闲着。
+
+Scripto 把它们变成一条真正的流水线：GPU 在转录第 1 个文件时，CPU 已经在给第 2 个文件提取音频，同时第 1 个的转录稿正在被翻译：
 
 ```mermaid
 flowchart LR
-    A[📁 扫描<br/>文件与文件夹] --> B[🎵 提取音频<br/>ffmpeg · 预提取下一个]
+    A[📁 扫描<br/>文件与文件夹] --> B[🎵 提取音频<br/>ffmpeg · CPU]
     B -->|有界队列| C[🎙️ 转录<br/>Whisper · GPU]
     C -->|有界队列| D[🌐 翻译<br/>Ollama · 同步进行]
     C --> E[📄 lecture.en.srt]
@@ -84,12 +83,15 @@ flowchart LR
     E & F --> G[🕰️ 历史索引]
 ```
 
-- 转录引擎按平台自动选：Apple Silicon 用 mlx-whisper（Metal 加速），Windows 用 faster-whisper（普通 CPU 就能跑，有 NVIDIA 显卡自动加速）
-- 3 小时的超长录音自动切段转录再无缝拼接，内存峰值被压平
-- 16GB 内存的机器可切「低内存模式」：转录完再翻译，任一时刻只有一个大模型在内存里
-- 每个环节都有超时和容错：一个坏文件只会被记录跳过，绝不拖垮整批
+**最贵的那一步——GPU 转录——几乎从不空等。** 速度就来自这里。几个刻意的取舍让它既快又稳：
 
-这些不是口号，是每次发版都实测的验收指标（脚本在 [`benchmarks/`](benchmarks/)，任何人可复跑）：
+- **转录故意一次只做一个。** 同时跑多个 Whisper 反而会把内存挤爆、越跑越慢——所以 Scripto 是让**其它阶段**围着一条稳定的转录流并行，而不是无脑全部并行。
+- **模型只加载一次。** Whisper 模型整批复用一次加载；Ollama 在文件之间保持常驻——不用每个文件都重新付一遍加载开销。
+- **不做无用功。** 已有字幕的文件秒跳过；坏文件记录后跳过，绝不卡住队列。
+- **长文件不撑爆内存。** 3 小时的录音自动切段转录、再用无缝时间轴拼回去。
+- **引擎自动选对。** Apple Silicon 用 mlx-whisper（Metal 加速），Windows 用 faster-whisper（普通 CPU 就能跑，有 NVIDIA 显卡自动加速）。
+
+这套并行到底省了多少？在 20 个文件**带翻译**的批次里，整批只比理论下界**多花 4.6%**——也就是说几乎等于单独转录所需的时间，提取和翻译都被藏在了它下面。下面每个数字都来自 [`benchmarks/`](benchmarks/) 里可复跑的脚本：
 
 | 指标 | 目标 | 实测 |
 |---|---|---|
