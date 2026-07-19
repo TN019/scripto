@@ -4,10 +4,7 @@
 
 **把一整个文件夹的视频，变成整理好的双语字幕——全程在你自己的电脑上。**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-4338ca.svg)](LICENSE)
-[![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776ab.svg)](pyproject.toml)
-[![Platform](https://img.shields.io/badge/平台-macOS%20%7C%20Windows-6366f1.svg)](#-快速开始)
-[![Tests](https://img.shields.io/badge/测试-137%20通过-16a34a.svg)](tests/)
+📄 [MIT 许可](LICENSE) &nbsp;·&nbsp; 🐍 Python 3.12+ &nbsp;·&nbsp; 💻 macOS / Windows &nbsp;·&nbsp; 🔒 100% 本地 &nbsp;·&nbsp; ✅ 137 项测试
 
 [English](README.md) | **简体中文**
 

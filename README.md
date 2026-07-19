@@ -4,10 +4,7 @@
 
 **Turn a whole folder of videos into tidy bilingual subtitles — entirely on your own computer.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-4338ca.svg)](LICENSE)
-[![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776ab.svg)](pyproject.toml)
-[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-6366f1.svg)](#-quick-start)
-[![Tests](https://img.shields.io/badge/Tests-137%20passing-16a34a.svg)](tests/)
+📄 [MIT License](LICENSE) &nbsp;·&nbsp; 🐍 Python 3.12+ &nbsp;·&nbsp; 💻 macOS / Windows &nbsp;·&nbsp; 🔒 100% local &nbsp;·&nbsp; ✅ 137 tests
 
 **English** | [简体中文](README.zh.md)
 
