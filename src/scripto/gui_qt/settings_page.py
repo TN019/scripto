@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core.languages import known_languages
 from .widgets import card, subtext
 
 
@@ -48,7 +47,6 @@ class SettingsPage(QWidget):
         t = self.t
         vm = self.vm
         config = vm.get_config()
-        lang_label = self.window_ref.lang_label
 
         language = _combo(
             [("en", "English"), ("zh", "中文")], config.get("language", "en"),
@@ -68,12 +66,6 @@ class SettingsPage(QWidget):
         fmt = _combo(
             [(f, f) for f in ("srt", "txt", "vtt", "json")], config["output_format"],
             lambda v: self._save("output_format", v),
-        )
-        tlang = _combo(
-            [("auto", t("tlang_auto"))]
-            + [(s.code, lang_label(s.code)) for s in known_languages()],
-            config["transcribe_language"],
-            lambda v: self._save("transcribe_language", v),
         )
         memory = _combo(
             [("balanced", t("gui.memory_balanced")), ("low", t("gui.memory_low"))],
@@ -122,7 +114,6 @@ class SettingsPage(QWidget):
         form.addRow(t("gui.settings_theme"), theme)
         form.addRow(t("gui.settings_model"), model)
         form.addRow(t("gui.settings_format"), fmt)
-        form.addRow(t("gui.settings_tlang"), tlang)
         form.addRow(t("gui.settings_memory"), memory)
         form.addRow(t("gui.settings_ollama_model"), ollama)
         form.addRow("", recursive)
@@ -242,11 +233,21 @@ class ModelManagerDialog(QDialog):
                               lambda n=name: self._run(self._pull_ollama, n),
                               lambda n=name: self._run(self._delete_ollama, n)))
         else:
+            host = QWidget()
+            row = QHBoxLayout(host)
+            row.setContentsMargins(4, 0, 4, 0)
+            row.setSpacing(8)
             down = subtext(t("gui.models_ollama_down"))
             down.setStyleSheet(
                 f"color: {self.page.window_ref.palette_tokens.warn};"
             )
-            add(down)
+            start_btn = QPushButton(t("gui.ollama_start"))
+            start_btn.setProperty("variant", "primary")
+            start_btn.setEnabled(not self.busy)
+            start_btn.clicked.connect(self._start_ollama)
+            row.addWidget(down, 1)
+            row.addWidget(start_btn)
+            add(host)
 
     def _row(self, label: str, installed: bool, on_download, on_delete) -> QWidget:
         t = self.t
@@ -295,6 +296,22 @@ class ModelManagerDialog(QDialog):
             window.run_in_main(apply)
 
         window.run_thread(job)
+
+    def _start_ollama(self) -> None:
+        if self.busy:
+            return
+        self.busy = True
+        self.progress.show()
+        self.status_label.setText(self.t("gui.ollama_starting"))
+        self.refresh()
+
+        def done(_ok: bool, message: str) -> None:
+            self.busy = False
+            self.progress.hide()
+            self.status_label.setText(message)
+            self.refresh()
+
+        self.page.window_ref.start_ollama(done)
 
     def _set_status(self, text: str) -> None:
         self.page.window_ref.run_in_main(lambda: self.status_label.setText(text))

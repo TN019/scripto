@@ -15,8 +15,13 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
+import subprocess
+import sys
+import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Callable, Iterator
 
 from ..core.errors import OperationStopped, ScriptoError
@@ -24,6 +29,7 @@ from ..core.errors import OperationStopped, ScriptoError
 logger = logging.getLogger(__name__)
 
 DEFAULT_URL = "http://localhost:11434"
+MAC_APP = Path("/Applications/Ollama.app")
 DEFAULT_TIMEOUT = 300.0
 MIN_NUM_CTX = 8192
 MAX_NUM_CTX = 32768
@@ -42,6 +48,47 @@ def required_num_ctx(prompt: str) -> int:
     required = int(prompt_tokens * 2.5) + 512
     clamped = max(MIN_NUM_CTX, min(MAX_NUM_CTX, required))
     return ((clamped + 1023) // 1024) * 1024
+
+
+def start_server(log_path: Path | None = None) -> tuple[bool, str]:
+    """Best-effort launch of the local Ollama server, detached from us.
+
+    macOS prefers the Ollama app (`open -g`: no focus steal) — it owns the
+    server lifecycle and survives Scripto quitting. Elsewhere, or with only
+    the CLI installed, `ollama serve` is spawned in its own session so it
+    keeps running after Scripto exits. Returns (launched, error-detail);
+    launched only means the spawn worked — poll ``is_reachable`` for ready.
+    """
+    if sys.platform == "darwin" and MAC_APP.is_dir():
+        proc = subprocess.run(
+            ["open", "-g", "-a", "Ollama"], capture_output=True, text=True, timeout=30
+        )
+        if proc.returncode == 0:
+            return True, ""
+        logger.warning("open -a Ollama failed: %s", proc.stderr.strip())
+        # fall through to the CLI path
+
+    exe = shutil.which("ollama")
+    if exe is None:
+        return False, "ollama is not installed"
+    kwargs: dict = {}
+    if sys.platform.startswith("win"):
+        kwargs["creationflags"] = (
+            subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+        )
+    else:
+        kwargs["start_new_session"] = True
+    out = open(log_path, "ab") if log_path is not None else subprocess.DEVNULL
+    try:
+        subprocess.Popen(
+            [exe, "serve"], stdin=subprocess.DEVNULL, stdout=out, stderr=out, **kwargs
+        )
+    except OSError as exc:
+        return False, str(exc)
+    finally:
+        if out is not subprocess.DEVNULL:
+            out.close()
+    return True, ""
 
 
 class OllamaClient:
@@ -121,6 +168,15 @@ class OllamaClient:
             return True
         except Exception:
             return False
+
+    def wait_reachable(self, timeout_sec: float = 15.0, interval: float = 0.5) -> bool:
+        """Poll until the server answers — for right after start_server()."""
+        deadline = time.monotonic() + timeout_sec
+        while time.monotonic() < deadline:
+            if self.is_reachable():
+                return True
+            time.sleep(interval)
+        return False
 
     def list_models(self, timeout: float | None = None) -> list[str]:
         req = urllib.request.Request(self.url + "/api/tags")

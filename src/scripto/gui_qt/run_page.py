@@ -238,11 +238,30 @@ class RunPage(QWidget):
         self.bar_text = QLabel(t("gui.idle"))
         self.bar_text.setStyleSheet("font-weight: 600;")
         self.bar_detail = subtext()
+        self.tlang_combo = QComboBox()
+        self.tlang_combo.setToolTip(t("gui.settings_tlang"))
+        self.tlang_combo.addItem(t("tlang_auto"), "auto")
+        for spec in known_languages():
+            self.tlang_combo.addItem(self.window_ref.lang_label(spec.code), spec.code)
+        tlang_index = self.tlang_combo.findData(
+            self.vm.get_config()["transcribe_language"]
+        )
+        if tlang_index >= 0:
+            self.tlang_combo.setCurrentIndex(tlang_index)
+        self.tlang_combo.currentIndexChanged.connect(
+            lambda i: self.vm.update_settings(
+                transcribe_language=self.tlang_combo.itemData(i)
+            )
+        )
+
+        self.ollama_btn = QPushButton(t("gui.ollama_start"))
+        self.ollama_btn.setToolTip(t("gui.models_ollama_down"))
+        self.ollama_btn.clicked.connect(self._start_ollama)
+        self.ollama_btn.hide()
+
         self.translate_check = QCheckBox(t("gui.translate_toggle"))
         self.translate_check.setChecked(bool(self.vm.get_config()["translate_enabled"]))
-        self.translate_check.toggled.connect(
-            lambda on: self.vm.update_settings(translate_enabled=bool(on))
-        )
+        self.translate_check.toggled.connect(self._on_translate_toggled)
         self.target_combo = QComboBox()
         for spec in known_languages():
             self.target_combo.addItem(self.window_ref.lang_label(spec.code), spec.code)
@@ -263,6 +282,10 @@ class RunPage(QWidget):
         bar_row.addWidget(self.bar_text)
         bar_row.addWidget(self.bar_detail)
         bar_row.addStretch(1)
+        bar_row.addWidget(self.ollama_btn)
+        bar_row.addWidget(subtext(t("gui.settings_tlang")))
+        bar_row.addWidget(self.tlang_combo)
+        bar_row.addSpacing(8)
         bar_row.addWidget(self.translate_check)
         bar_row.addWidget(self.target_combo)
 
@@ -288,6 +311,44 @@ class RunPage(QWidget):
         root.setSpacing(0)
         root.addLayout(content, 1)
         root.addWidget(bottom)
+
+        if self.translate_check.isChecked():
+            self._check_ollama_async()
+
+    # ------------------------------------------------------------------ #
+    # Ollama availability (translate needs a running server)
+    # ------------------------------------------------------------------ #
+
+    def _on_translate_toggled(self, on: bool) -> None:
+        self.vm.update_settings(translate_enabled=bool(on))
+        if on:
+            self._check_ollama_async()
+        else:
+            self.ollama_btn.hide()
+
+    def _check_ollama_async(self) -> None:
+        client = self.vm.ollama_client()
+
+        def job() -> None:
+            reachable = client.is_reachable()
+            self.window_ref.run_in_main(
+                lambda: self.ollama_btn.setVisible(
+                    not reachable and self.translate_check.isChecked()
+                )
+            )
+
+        self.window_ref.run_thread(job)
+
+    def _start_ollama(self) -> None:
+        self.ollama_btn.setEnabled(False)
+        self.window_ref.toast(self.t("gui.ollama_starting"))
+
+        def done(ok: bool, message: str) -> None:
+            self.ollama_btn.setEnabled(True)
+            self.ollama_btn.setVisible(not ok and self.translate_check.isChecked())
+            self.window_ref.toast(message, ok=ok)
+
+        self.window_ref.start_ollama(done)
 
     # ------------------------------------------------------------------ #
     # Inputs

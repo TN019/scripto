@@ -110,6 +110,30 @@ class MainWindow(QMainWindow):
     def toast(self, message: str, ok: bool = True) -> None:
         self._toast.show_message(message, ok=ok)
 
+    def start_ollama(self, on_done) -> None:
+        """Launch the local Ollama server and wait until it answers.
+
+        ``on_done(ok, message)`` runs on the UI thread. Shared by the run
+        page and the model manager, so \"Ollama is not running\" is always
+        one click away from fixed instead of a trip to the terminal.
+        """
+        from ..core import paths
+        from ..translate.ollama import start_server
+
+        client = self.vm.ollama_client()
+
+        def job() -> None:
+            launched, detail = start_server(paths.log_dir() / "ollama.log")
+            if not launched:
+                ok, message = False, self.t("gui.ollama_start_failed", reason=detail)
+            elif client.wait_reachable():
+                ok, message = True, self.t("gui.ollama_started")
+            else:
+                ok, message = False, self.t("gui.ollama_start_timeout")
+            self.run_in_main(lambda: on_done(ok, message))
+
+        self.run_thread(job)
+
     # ------------------------------------------------------------------ #
     # Mount / remount
     # ------------------------------------------------------------------ #

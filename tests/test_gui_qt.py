@@ -96,3 +96,13 @@ def test_drain_tick_updates_rows_and_log(tmp_path, qapp):
     label = window.run_page.row_widgets[1].status_label.text()
     assert label == window.t("status.transcribing")
     assert "transcribing" in window.run_page.log_view.toPlainText()
+
+
+def test_transcribe_language_lives_on_the_run_page(tmp_path, qapp):
+    window = make_window(tmp_path, qapp)
+    combo = window.run_page.tlang_combo
+    assert combo.currentData() == "auto"
+    combo.setCurrentIndex(combo.findData("ja"))
+    assert window.vm.get_config()["transcribe_language"] == "ja"
+    # The start-Ollama affordance exists and stays hidden until needed.
+    assert not window.run_page.ollama_btn.isVisible()
