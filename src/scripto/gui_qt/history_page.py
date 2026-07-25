@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .widgets import ElidedLabel, card, reveal_in_file_manager, subtext
+from .widgets import ElidedLabel, card, clear_layout, reveal_in_file_manager, subtext
 
 
 class HistoryPage(QWidget):
@@ -59,10 +59,7 @@ class HistoryPage(QWidget):
 
     def refresh(self) -> None:
         t = self.t
-        while self.list_box.count() > 1:
-            item = self.list_box.takeAt(0)
-            if item.widget() is not None:
-                item.widget().deleteLater()
+        clear_layout(self.list_box, keep_tail=1)
 
         groups = self.vm.history_groups()
         if not groups:
@@ -168,10 +165,7 @@ class _ViewerDialog(QDialog):
             self._load(self.lang)
 
     def _clear_buttons(self) -> None:
-        while self.lang_row.count() > 1:
-            item = self.lang_row.takeAt(0)
-            if item.widget() is not None:
-                item.widget().deleteLater()
+        clear_layout(self.lang_row, keep_tail=1)  # keep the trailing stretch
 
     def _rebuild_buttons(self) -> None:
         self._clear_buttons()

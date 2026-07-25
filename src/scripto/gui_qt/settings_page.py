@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .widgets import card, subtext
+from .widgets import card, clear_layout, subtext
 
 
 def _combo(options: list[tuple[str, str]], value: str, on_change) -> QComboBox:
@@ -202,10 +202,7 @@ class ModelManagerDialog(QDialog):
 
     def refresh(self) -> None:
         t = self.t
-        while self.rows_box.count() > 1:
-            item = self.rows_box.takeAt(0)
-            if item.widget() is not None:
-                item.widget().deleteLater()
+        clear_layout(self.rows_box, keep_tail=1)
 
         def header(text: str) -> QLabel:
             label = QLabel(text)
@@ -390,10 +387,7 @@ class DoctorDialog(QDialog):
 
         def apply() -> None:
             palette = window.palette_tokens
-            while self.rows_box.count() > 1:
-                item = self.rows_box.takeAt(0)
-                if item.widget() is not None:
-                    item.widget().deleteLater()
+            clear_layout(self.rows_box, keep_tail=1)
             for result in results:
                 if result.ok:
                     mark, color = "✓", palette.ok

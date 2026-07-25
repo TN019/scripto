@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
 
 from ..core.jobs import JobStatus
 from ..core.languages import known_languages
-from .widgets import ElidedLabel, reveal_in_file_manager, subtext
+from .widgets import ElidedLabel, clear_layout, reveal_in_file_manager, subtext
 
 SCAN_DEBOUNCE_MS = 600
 
@@ -402,12 +402,7 @@ class RunPage(QWidget):
     # ------------------------------------------------------------------ #
 
     def rebuild_rows(self) -> None:
-        while self.rows_box.count() > 1:  # keep the trailing stretch
-            item = self.rows_box.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                widget.setParent(None)  # off-screen now, not at next event loop
-                widget.deleteLater()
+        clear_layout(self.rows_box, keep_tail=1)  # keep the trailing stretch
         self.row_widgets = {}
         for row_id in self.vm.row_order:
             widget = FileRowWidget(self, self.vm.rows[row_id])

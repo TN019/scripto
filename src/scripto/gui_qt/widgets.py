@@ -11,6 +11,23 @@ from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import QFrame, QGraphicsOpacityEffect, QLabel, QWidget
 
 
+def clear_layout(layout, keep_tail: int = 0) -> None:
+    """Remove (and destroy) leading layout items, keeping the last few.
+
+    ``setParent(None)`` before ``deleteLater()`` matters: a widget that is
+    merely taken out of a layout stays a visible child of the window with
+    whatever geometry it had — for never-shown widgets that is Qt's 640×480
+    default, which paints as a giant ghost over the dialog until the
+    deferred delete runs.
+    """
+    while layout.count() > keep_tail:
+        item = layout.takeAt(0)
+        widget = item.widget()
+        if widget is not None:
+            widget.setParent(None)
+            widget.deleteLater()
+
+
 def card(parent: QWidget | None = None) -> QFrame:
     frame = QFrame(parent)
     frame.setProperty("card", "true")
