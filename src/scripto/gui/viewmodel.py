@@ -1,4 +1,4 @@
-"""GUI state and logic — no flet imports allowed in this module.
+"""GUI state and logic — no UI-toolkit imports allowed in this module.
 
 The view layer calls into this from background threads (scan, batch run,
 model downloads) and drains UI-relevant changes on a throttled timer via

@@ -1,6 +1,7 @@
-"""Desktop GUI (Flet).
+"""GUI state layer.
 
 Split by rule: ``viewmodel.py`` owns all state and logic and never imports
-flet (fully unit-tested); the flet layer is a thin renderer that drains the
-viewmodel on a throttled timer and only touches changed rows.
+a UI toolkit (fully unit-tested); the Qt view layer in ``scripto.gui_qt``
+is a thin renderer that drains the viewmodel on a throttled timer and only
+touches changed rows.
 """
