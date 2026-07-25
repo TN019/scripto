@@ -32,6 +32,13 @@ def main() -> int:
             log_level="warning",
         )
     else:
+        # macOS: open the window with the Scripto-branded viewer copy so the
+        # Dock shows our icon, not the stock Flet one (no-op elsewhere).
+        from .core.viewer import ensure_branded_viewer
+
+        viewer_dir = ensure_branded_viewer()
+        if viewer_dir is not None:
+            os.environ["FLET_VIEW_PATH"] = str(viewer_dir)
         ft.app(target=gui_main)
     return 0
 

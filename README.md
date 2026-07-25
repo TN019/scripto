@@ -59,6 +59,7 @@ bash launchers/macos/build_app.sh # builds dist/Scripto.app
 
 Drag `dist/Scripto.app` into Applications and double-click from now on — or just run `uv run scripto`.
 Updating later takes one click: **Settings → Check updates** pulls the latest code and restarts the app.
+Closing the window just tucks Scripto into the Dock — a running batch keeps working; click the Dock icon to bring it back, ⌘Q to quit.
 
 **Windows** (PowerShell)
 
