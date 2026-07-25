@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from . import paths
+from .languages import suffix_map
 
 DEFAULTS: dict[str, Any] = {
     # UI
@@ -23,7 +24,7 @@ DEFAULTS: dict[str, Any] = {
     # Transcription
     "engine": "auto",                # auto | mlx | faster-whisper
     "whisper_model": "large-v3-turbo",
-    "transcribe_language": "auto",   # auto | en | zh
+    "transcribe_language": "auto",   # auto | any code in core/languages.py
     "output_format": "srt",          # srt | txt | vtt | json
     "recursive_scan": True,
     "overwrite": False,
@@ -40,7 +41,7 @@ DEFAULTS: dict[str, Any] = {
     "segment_chunk_sec": 1800,
     # Output (R4): None = write next to the source file
     "export_dir": None,
-    "lang_suffixes": {"en": ".en", "zh": ".zh"},
+    "lang_suffixes": suffix_map(),   # single source of truth: core/languages.py
 }
 
 

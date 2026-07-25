@@ -20,6 +20,7 @@ from pathlib import Path
 import flet as ft
 
 from ..core.jobs import JobStatus
+from ..core.languages import known_languages
 from ..i18n import I18n
 from .viewmodel import FileRow, GuiViewModel
 
@@ -241,8 +242,8 @@ class GuiApp:
         self.target_dd = ft.Dropdown(
             label=t("gui.target"), width=130, border_radius=8,
             value=self.vm.get_config()["translate_target"],
-            options=[ft.dropdown.Option("zh", t("tlang_zh")),
-                     ft.dropdown.Option("en", t("tlang_en"))],
+            options=[ft.dropdown.Option(spec.code, self._lang_label(spec.code))
+                     for spec in known_languages()],
             on_select=lambda e: self._save_setting("translate_target", e.control.value),
         )
 
@@ -731,7 +732,8 @@ class GuiApp:
         )
         tlang_dd = self._dd(
             t("gui.settings_tlang"), "transcribe_language",
-            [("auto", t("tlang_auto")), ("en", t("tlang_en")), ("zh", t("tlang_zh"))],
+            [("auto", t("tlang_auto"))]
+            + [(spec.code, self._lang_label(spec.code)) for spec in known_languages()],
             width=200,
         )
         memory_dd = self._dd(

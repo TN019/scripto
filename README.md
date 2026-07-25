@@ -32,7 +32,7 @@ No uploads, no queues, no subscriptions. Transcription runs on a Whisper model o
 ## Who is it for?
 
 - 🎓 **Students with recorded courses** — batch-convert a semester of lectures into searchable, reviewable subtitles and transcripts
-- 🗣️ **Anyone watching foreign-language talks** — audio in one language, side-by-side bilingual subtitles out
+- 🗣️ **Anyone watching foreign-language talks** — audio in one language, side-by-side bilingual subtitles out; translate between any pair of English, Chinese, Japanese and Korean
 - 🎙️ **People who transcribe meetings & interviews** — drop recordings in, get timestamped text back (srt/txt/vtt/json)
 - 🔏 **Anyone who cares about privacy** — sensitive recordings that must not touch a cloud? There is no cloud here
 

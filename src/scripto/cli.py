@@ -22,6 +22,7 @@ from .core.errors import ScriptoError
 from .core.events import BatchEvent, Event, EventBus, StatusEvent
 from .core.history import HistoryStore
 from .core.jobs import BatchStats, Job
+from .core.languages import known_languages
 from .core.logs import setup_logging
 from .core.pipeline import Pipeline, PipelineSettings
 from .engines.models import get_spec
@@ -43,7 +44,8 @@ def build_parser(i18n: I18n) -> argparse.ArgumentParser:
     run = subparsers.add_parser("run", help=i18n.t("cli.run.help"))
     run.add_argument("inputs", nargs="+", help="media files and/or folders")
     run.add_argument("--model", default=None, help="whisper model key (e.g. tiny, large-v3-turbo)")
-    run.add_argument("--language", default=None, choices=["auto", "en", "zh"])
+    lang_codes = [spec.code for spec in known_languages()]
+    run.add_argument("--language", default=None, choices=["auto", *lang_codes])
     run.add_argument("--format", dest="fmt", default=None, choices=["srt", "txt", "vtt", "json"])
     run.add_argument("--overwrite", action="store_true", default=None)
     run.add_argument("--no-recursive", dest="recursive", action="store_false", default=None)
@@ -51,7 +53,7 @@ def build_parser(i18n: I18n) -> argparse.ArgumentParser:
     run.add_argument("--translate", action="store_true", default=None,
                      help="also translate subtitles via local Ollama")
     run.add_argument("--no-translate", dest="translate", action="store_false")
-    run.add_argument("--target", default=None, choices=["zh", "en"],
+    run.add_argument("--target", default=None, choices=lang_codes,
                      help="translation target language")
     return parser
 

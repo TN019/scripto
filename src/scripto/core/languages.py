@@ -45,3 +45,5 @@ def suffix_map() -> dict[str, str]:
 
 register_language(LanguageSpec(code="en", prompt_name="English", suffix=".en"))
 register_language(LanguageSpec(code="zh", prompt_name="Simplified Chinese", suffix=".zh"))
+register_language(LanguageSpec(code="ja", prompt_name="Japanese", suffix=".ja"))
+register_language(LanguageSpec(code="ko", prompt_name="Korean", suffix=".ko"))
