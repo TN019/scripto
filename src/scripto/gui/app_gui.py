@@ -764,6 +764,9 @@ class GuiApp:
                     ), ft.OutlinedButton(
                         t("gui.doctor_run"), icon=ft.Icons.HEALTH_AND_SAFETY_OUTLINED,
                         on_click=self._on_run_doctor,
+                    ), ft.OutlinedButton(
+                        t("gui.update_check"), icon=ft.Icons.SYSTEM_UPDATE_ALT,
+                        on_click=self._on_check_update,
                     )]),
                     ft.Row(spacing=12, controls=[format_dd, tlang_dd, memory_dd]),
                     ft.Row(spacing=12, controls=[ollama_dd]),
@@ -999,6 +1002,89 @@ class GuiApp:
                 controls.append(ft.Column(spacing=2, tight=True, controls=lines))
             rows.controls = controls
             self.page.update()
+
+        self.page.run_thread(job)
+
+    # ------------------------------------------------------------------ #
+    # In-app update (Settings → Check updates)
+    # ------------------------------------------------------------------ #
+
+    def _on_check_update(self, _e: ft.ControlEvent) -> None:
+        from ..core import update as up
+
+        if self.vm.running:
+            self._toast(self.t("gui.update_running"), ok=False)
+            return
+        root = up.repo_root()
+        if root is None:
+            self._toast(self.t("gui.update_not_checkout"), ok=False)
+            return
+
+        body = ft.Column(spacing=8, tight=True, controls=[])
+        dialog = ft.AlertDialog(
+            title=ft.Text(self.t("gui.update_title"), size=15),
+            content=ft.Container(width=440, content=body),
+            actions=[ft.TextButton(self.t("gui.close"),
+                                   on_click=lambda _e: self.page.pop_dialog())],
+        )
+
+        def show(*controls: ft.Control, actions: list[ft.Control] | None = None) -> None:
+            body.controls = list(controls)
+            if actions is not None:
+                dialog.actions = actions
+            self.page.update()
+
+        def progress(label: str) -> ft.Row:
+            return ft.Row(spacing=8, controls=[
+                ft.ProgressRing(width=18, height=18, stroke_width=2),
+                ft.Text(label, size=13),
+            ])
+
+        def do_update(_e: ft.ControlEvent) -> None:
+            show(progress(self.t("gui.update_pulling")), actions=[])
+
+            def job() -> None:
+                ok, detail = up.pull(root)
+                if not ok:
+                    show(
+                        ft.Text(self.t("gui.update_failed", detail=detail),
+                                size=13, selectable=True),
+                        actions=[ft.TextButton(self.t("gui.close"),
+                                               on_click=lambda _e: self.page.pop_dialog())],
+                    )
+                    return
+                # New instance boots with the pulled code; this one closes.
+                up.spawn_restart(root)
+                self.page.window.destroy()
+
+            self.page.run_thread(job)
+
+        self.page.show_dialog(dialog)
+        show(progress(self.t("gui.update_checking")))
+
+        def job() -> None:
+            status = up.check(root)
+            if not status.ok:
+                show(ft.Text(self.t("gui.update_check_failed", detail=status.detail),
+                             size=13, selectable=True))
+                return
+            if status.behind == 0:
+                show(ft.Text(self.t("gui.update_uptodate"), size=13))
+                return
+            if status.dirty:
+                show(ft.Text(self.t("gui.update_dirty", count=status.behind),
+                             size=13, selectable=True))
+                return
+            show(
+                ft.Text(self.t("gui.update_behind", count=status.behind), size=13),
+                ft.Text(self.t("gui.update_restart_note"), size=11,
+                        color=ft.Colors.ON_SURFACE_VARIANT),
+                actions=[
+                    ft.TextButton(self.t("gui.close"),
+                                  on_click=lambda _e: self.page.pop_dialog()),
+                    ft.FilledButton(self.t("gui.update_now"), on_click=do_update),
+                ],
+            )
 
         self.page.run_thread(job)
 
