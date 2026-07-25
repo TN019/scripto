@@ -120,6 +120,8 @@ CATALOG: dict[str, str] = {
     "tlang_auto": "Auto-detect",
     "tlang_en": "English",
     "tlang_zh": "Chinese",
+    "tlang_ja": "Japanese",
+    "tlang_ko": "Korean",
     "doctor.header": "Environment check",
     "doctor.ffmpeg": "ffmpeg",
     "doctor.engine": "Transcription engine",
