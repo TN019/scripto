@@ -58,6 +58,7 @@ bash launchers/macos/build_app.sh # 生成 dist/Scripto.app
 ```
 
 把 `dist/Scripto.app` 拖进「应用程序」，以后双击即用——或直接 `uv run scripto`。
+之后升级只需一下：**设置 → 检查更新** 会拉取最新代码并重启应用。
 
 **Windows**（PowerShell）
 
