@@ -1123,12 +1123,17 @@ class GuiApp:
             pass
 
     def _on_window_event(self, e: ft.WindowEvent) -> None:
-        # The close button minimizes to the Dock instead of quitting, so a
-        # running batch survives a casual window close (⌘Q still quits, and
-        # the in-app updater's destroy() bypasses prevent_close).
+        # The close button hides the whole app: window gone (no minimized
+        # thumbnail), Dock icon stays, clicking it brings the window back —
+        # so a running batch survives a casual close. ⌘Q still quits, and
+        # the in-app updater's destroy() bypasses prevent_close. Where
+        # app-hiding is unavailable (Windows/Linux) fall back to minimize.
         if e.type == ft.WindowEventType.CLOSE:
-            self.page.window.minimized = True
-            self.page.update()
+            from ..core.viewer import hide_viewer_app
+
+            if not hide_viewer_app():
+                self.page.window.minimized = True
+                self.page.update()
 
     def _toast(self, message: str, ok: bool = True) -> None:
         self.page.show_dialog(ft.SnackBar(
