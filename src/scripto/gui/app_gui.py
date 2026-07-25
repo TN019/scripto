@@ -12,6 +12,7 @@ Hard rules (my-transcriptor lessons):
 from __future__ import annotations
 
 import asyncio
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -166,6 +167,12 @@ class GuiApp:
         page.window.min_width = 760
         page.window.min_height = 560
         page.window.on_resized = self._on_resized
+        if not os.environ.get("SCRIPTO_GUI_WEB"):
+            # Closing the window minimizes to the Dock and keeps jobs
+            # running; ⌘Q quits for real. (Desktop only — the web view used
+            # for headless UI tests has no native window.)
+            page.window.prevent_close = True
+            page.window.on_event = self._on_window_event
 
         self.file_picker = ft.FilePicker()
         page.services.append(self.file_picker)
@@ -1112,6 +1119,14 @@ class GuiApp:
             )
         except Exception:
             pass
+
+    def _on_window_event(self, e: ft.WindowEvent) -> None:
+        # The close button minimizes to the Dock instead of quitting, so a
+        # running batch survives a casual window close (⌘Q still quits, and
+        # the in-app updater's destroy() bypasses prevent_close).
+        if e.type == ft.WindowEventType.CLOSE:
+            self.page.window.minimized = True
+            self.page.update()
 
     def _toast(self, message: str, ok: bool = True) -> None:
         self.page.show_dialog(ft.SnackBar(

@@ -27,6 +27,10 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>LSMinimumSystemVersion</key><string>12.0</string>
     <key>NSHighResolutionCapable</key><true/>
+    <!-- The launcher only execs `uv run scripto`; the visible Dock icon is
+         the branded viewer the GUI opens. Hiding the launcher from the Dock
+         leaves exactly one Scripto icon. -->
+    <key>LSUIElement</key><true/>
 </dict>
 </plist>
 PLIST
