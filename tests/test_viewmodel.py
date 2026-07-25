@@ -182,7 +182,7 @@ def test_history_groups_merge_languages_per_source(tmp_path):
     assert len(groups) == 1  # one entry per source file, not per production
     group = groups[0]
     assert set(group.existing) == {"en", "zh"}
-    assert group.missing == []
+    assert group.missing == ["ja", "ko"]
     assert not group.deleted
 
 
@@ -196,7 +196,7 @@ def test_history_group_offers_missing_language(tmp_path):
         model="tiny", engine="mlx", status="done",
     ))
     group = vm.history_groups()[0]
-    assert group.missing == ["zh"]
+    assert group.missing == ["zh", "ja", "ko"]
     assert group.translate_from == str(en_srt)
 
 
@@ -244,7 +244,7 @@ def test_translate_history_produces_and_records(tmp_path, monkeypatch):
     assert produced and produced[0].name == "talk.zh.srt"
     regrouped = vm.history_groups()[0]
     assert set(regrouped.existing) == {"en", "zh"}
-    assert regrouped.missing == []
+    assert regrouped.missing == ["ja", "ko"]
 
 
 def test_first_run_detection(tmp_path):

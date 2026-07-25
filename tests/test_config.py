@@ -1,11 +1,17 @@
 import json
 
 from scripto.core.config import DEFAULTS, ConfigService
+from scripto.core.languages import suffix_map
 
 
 def test_load_returns_defaults_when_file_missing(tmp_path):
     service = ConfigService(tmp_path / "config.json")
     assert service.load() == DEFAULTS
+
+
+def test_default_lang_suffixes_come_from_registry(tmp_path):
+    service = ConfigService(tmp_path / "config.json")
+    assert service.load()["lang_suffixes"] == suffix_map()
 
 
 def test_save_and_load_roundtrip(tmp_path):

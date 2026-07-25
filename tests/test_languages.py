@@ -7,7 +7,11 @@ from scripto.core import languages, output
 def test_builtin_languages():
     assert languages.get_language("zh").suffix == ".zh"
     assert languages.get_language("en").suffix == ".en"
+    assert languages.get_language("ja").suffix == ".ja"
+    assert languages.get_language("ko").suffix == ".ko"
     assert languages.get_language("zh").prompt_name == "Simplified Chinese"
+    assert languages.get_language("ja").prompt_name == "Japanese"
+    assert languages.get_language("ko").prompt_name == "Korean"
 
 
 def test_unknown_language_raises():
@@ -17,13 +21,13 @@ def test_unknown_language_raises():
 
 
 def test_registering_a_language_needs_no_pipeline_changes():
-    spec = languages.LanguageSpec(code="ja", prompt_name="Japanese", suffix=".ja")
+    spec = languages.LanguageSpec(code="fr", prompt_name="French", suffix=".fr")
     languages.register_language(spec)
     try:
-        assert languages.get_language("ja") == spec
-        assert languages.suffix_map()["ja"] == ".ja"
+        assert languages.get_language("fr") == spec
+        assert languages.suffix_map()["fr"] == ".fr"
     finally:
-        languages._REGISTRY.pop("ja", None)
+        languages._REGISTRY.pop("fr", None)
 
 
 def test_output_suffixes_come_from_registry():
