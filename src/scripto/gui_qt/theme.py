@@ -228,6 +228,22 @@ QCheckBox {{
     spacing: 7px;
 }}
 
+/* ---- menus ------------------------------------------------------------ */
+QMenu {{
+    background: {p.surface};
+    border: 1px solid {p.border};
+    border-radius: 8px;
+    padding: 4px;
+}}
+QMenu::item {{
+    padding: 6px 18px;
+    border-radius: 6px;
+}}
+QMenu::item:selected {{
+    background: {p.selection};
+    color: {p.text};
+}}
+
 /* ---- progress --------------------------------------------------------- */
 QProgressBar {{
     background: {p.border};

@@ -135,3 +135,21 @@ def test_history_viewer_renders_srt_as_transcript(tmp_path, qapp):
 
     labels = [b.text() for b in dialog.findChildren(QPushButton)]
     assert labels.count(window.lang_label("en")) == 1
+
+
+def test_paths_are_added_and_removed_one_by_one(tmp_path, qapp):
+    media = tmp_path / "clip.mp4"
+    media.write_bytes(b"x")
+    window = make_window(tmp_path, qapp)
+    page = window.run_page
+    assert page.hint_label.isVisibleTo(page.paths_card)  # empty state shows the hint
+
+    page._append_paths([str(media)])
+    page._append_paths([str(media)])  # duplicates are ignored
+    assert page.input_paths == [str(media)]
+    assert not page.hint_label.isVisibleTo(page.paths_card)
+    assert page.clear_btn.isVisibleTo(page.paths_card)
+
+    page._remove_path(str(media))
+    assert page.input_paths == []
+    assert page.hint_label.isVisibleTo(page.paths_card)

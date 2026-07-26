@@ -8,6 +8,7 @@ debounce; the paths box accepts drops of files and folders.
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
@@ -52,24 +54,24 @@ ACTIVE_STATUSES = (
 )
 
 
-class DropPathsEdit(QPlainTextEdit):
-    """Paths textarea that also accepts Finder/Explorer drops."""
+class DropCard(QFrame):
+    """Card that turns Finder/Explorer drops into added path entries."""
 
     def __init__(self, on_dropped, parent=None):
         super().__init__(parent)
-        self._on_dropped = on_dropped
+        self.setProperty("card", "true")
         self.setAcceptDrops(True)
+        self._on_dropped = on_dropped
 
-    def canInsertFromMimeData(self, source) -> bool:  # noqa: N802
-        return source.hasUrls() or super().canInsertFromMimeData(source)
+    def dragEnterEvent(self, event) -> None:  # noqa: N802
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
 
-    def insertFromMimeData(self, source) -> None:  # noqa: N802
-        if source.hasUrls():
-            paths = [u.toLocalFile() for u in source.urls() if u.isLocalFile()]
-            if paths:
-                self._on_dropped(paths)
-                return
-        super().insertFromMimeData(source)
+    def dropEvent(self, event) -> None:  # noqa: N802
+        paths = [u.toLocalFile() for u in event.mimeData().urls() if u.isLocalFile()]
+        if paths:
+            self._on_dropped(paths)
+            event.acceptProposedAction()
 
 
 class FileRowWidget(QFrame):
@@ -153,6 +155,7 @@ class RunPage(QWidget):
         self.vm = window.vm
         self.t = window.t
         self.row_widgets: dict[int, FileRowWidget] = {}
+        self.input_paths: list[str] = []
         self._scan_timer = QTimer(self)
         self._scan_timer.setSingleShot(True)
         self._scan_timer.setInterval(SCAN_DEBOUNCE_MS)
@@ -165,26 +168,36 @@ class RunPage(QWidget):
     def _build(self) -> None:
         t = self.t
 
-        self.paths_edit = DropPathsEdit(self._append_paths)
-        self.paths_edit.setPlaceholderText(t("gui.paths_hint"))
-        self.paths_edit.setFixedHeight(74)
-        self.paths_edit.textChanged.connect(self._scan_timer.start)
+        # Inputs live as one entry per path: add via ＋ (or drop), remove
+        # per-entry — no free-text path editing.
+        self.paths_card = DropCard(self._append_paths)
+        self.paths_box = QVBoxLayout(self.paths_card)
+        self.paths_box.setContentsMargins(10, 8, 10, 8)
+        self.paths_box.setSpacing(2)
 
-        pick_files = QPushButton(t("gui.pick_files"))
-        pick_files.clicked.connect(self._pick_files)
-        pick_folder = QPushButton(t("gui.pick_folder"))
-        pick_folder.clicked.connect(self._pick_folder)
-        clear_btn = QPushButton(t("gui.clear"))
-        clear_btn.clicked.connect(self._clear)
+        self.add_btn = QPushButton(t("gui.add_path"))
+        self.add_btn.setProperty("variant", "quiet")
+        add_menu = QMenu(self.add_btn)
+        add_menu.addAction(t("gui.pick_files"), self._pick_files)
+        add_menu.addAction(t("gui.pick_folder"), self._pick_folder)
+        self.add_btn.setMenu(add_menu)
+        self.clear_btn = QPushButton(t("gui.clear"))
+        self.clear_btn.setProperty("variant", "quiet")
+        self.clear_btn.clicked.connect(self._clear)
+        self.hint_label = subtext(t("gui.paths_hint"))
         self.scan_status = subtext()
 
-        buttons = QHBoxLayout()
-        buttons.setSpacing(8)
-        buttons.addWidget(pick_files)
-        buttons.addWidget(pick_folder)
-        buttons.addWidget(clear_btn)
-        buttons.addWidget(self.scan_status)
-        buttons.addStretch(1)
+        footer = QWidget()
+        footer_row = QHBoxLayout(footer)
+        footer_row.setContentsMargins(0, 2, 0, 0)
+        footer_row.setSpacing(8)
+        footer_row.addWidget(self.add_btn)
+        footer_row.addWidget(self.clear_btn)
+        footer_row.addWidget(self.hint_label)
+        footer_row.addWidget(self.scan_status)
+        footer_row.addStretch(1)
+        self.paths_box.addWidget(footer)
+        self._rebuild_path_rows()
 
         # File rows in a scroll area
         self.rows_box = QVBoxLayout()
@@ -300,8 +313,7 @@ class RunPage(QWidget):
         content = QVBoxLayout()
         content.setContentsMargins(16, 12, 16, 4)
         content.setSpacing(10)
-        content.addWidget(self.paths_edit)
-        content.addLayout(buttons)
+        content.addWidget(self.paths_card)
         content.addWidget(scroll, 1)
         content.addWidget(self.log_toggle)
         content.addWidget(self.log_panel)
@@ -355,12 +367,45 @@ class RunPage(QWidget):
     # ------------------------------------------------------------------ #
 
     def _append_paths(self, paths: list[str]) -> None:
-        lines = [l for l in self.paths_edit.toPlainText().splitlines() if l.strip()]
+        if self.vm.running:
+            return
         for p in paths:
-            if p not in lines:
-                lines.append(p)
-        self.paths_edit.setPlainText("\n".join(lines))
+            if p and p not in self.input_paths:
+                self.input_paths.append(p)
+        self._rebuild_path_rows()
         self._scan_timer.start(0)
+
+    def _remove_path(self, path: str) -> None:
+        if self.vm.running:
+            return
+        self.input_paths = [p for p in self.input_paths if p != path]
+        self._rebuild_path_rows()
+        if self.input_paths:
+            self._scan_timer.start(0)
+        else:
+            self._clear()
+
+    def _rebuild_path_rows(self) -> None:
+        clear_layout(self.paths_box, keep_tail=1)  # keep the footer row
+        for path in self.input_paths:
+            row_host = QWidget()
+            row = QHBoxLayout(row_host)
+            row.setContentsMargins(2, 1, 2, 1)
+            row.setSpacing(8)
+            icon = QLabel("📁" if Path(path).is_dir() else "🎬")
+            label = ElidedLabel(path)
+            label.setToolTip(path)
+            remove = QPushButton("✕")
+            remove.setProperty("variant", "quiet")
+            remove.setFixedWidth(28)
+            remove.clicked.connect(lambda _=False, p=path: self._remove_path(p))
+            row.addWidget(icon)
+            row.addWidget(label, 1)
+            row.addWidget(remove)
+            self.paths_box.insertWidget(self.paths_box.count() - 1, row_host)
+        has_paths = bool(self.input_paths)
+        self.hint_label.setVisible(not has_paths)
+        self.clear_btn.setVisible(has_paths)
 
     def _pick_files(self) -> None:
         files, _ = QFileDialog.getOpenFileNames(self, self.t("gui.pick_files"))
@@ -375,15 +420,14 @@ class RunPage(QWidget):
     def _clear(self) -> None:
         if self.vm.running:
             return
-        self.paths_edit.blockSignals(True)
-        self.paths_edit.setPlainText("")
-        self.paths_edit.blockSignals(False)
+        self.input_paths = []
+        self._rebuild_path_rows()
         self.scan_status.setText("")
         self.vm.clear_files()
         self.rebuild_rows()
 
     def _scan_now(self) -> None:
-        text = self.paths_edit.toPlainText()
+        text = "\n".join(self.input_paths)
         self.scan_status.setText(self.t("gui.scanning"))
 
         def job() -> None:
@@ -437,7 +481,7 @@ class RunPage(QWidget):
         self.start_btn.setVisible(not running)
         self.stop_btn.setVisible(running)
         self.stop_btn.setEnabled(True)
-        self.paths_edit.setReadOnly(running)
+        self.paths_card.setEnabled(not running)
 
     def apply_drain(self, result) -> None:
         for row_id in result.changed_rows:
