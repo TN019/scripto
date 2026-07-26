@@ -39,3 +39,37 @@ def test_format_ms_hours_and_minutes():
     assert format_ms(0) == "0:00"
     assert format_ms(65_000) == "1:05"
     assert format_ms(3_600_000) == "1:00:00"
+
+
+def test_split_text_keeps_words_whole():
+    from scripto.gui_qt.player import split_text
+
+    text = "alpha beta gamma delta epsilon"
+    chunks = split_text(text, max_chars=12)
+    assert chunks == ["alpha beta", "gamma delta", "epsilon"]
+    assert all(len(c) <= 12 for c in chunks)
+    assert " ".join(chunks) == text  # nothing lost, no word broken
+
+
+def test_split_text_hard_cuts_spaceless_cjk():
+    from scripto.gui_qt.player import split_text
+
+    text = "这是一段没有空格的很长的中文字幕内容"
+    chunks = split_text(text, max_chars=8)
+    assert all(len(c) <= 8 for c in chunks)
+    assert "".join(chunks) == text
+
+
+def test_long_cue_splits_time_evenly():
+    from scripto.gui_qt.player import build_cues, cue_at
+
+    long_text = " ".join(f"word{i:02d}" for i in range(30))  # 209 chars
+    srt = f"1\n00:00:10,000 --> 00:00:16,000\n{long_text}\n"
+    cues = build_cues(srt, max_chars=80)
+    assert len(cues) == 3
+    starts = [c[0] for c in cues]
+    ends = [c[1] for c in cues]
+    assert starts == [10000, 12000, 14000]   # 6s span shared evenly by 3
+    assert ends == [12000, 14000, 16000]     # contiguous, no gaps
+    assert cue_at(cues, 11000).startswith("word00")
+    assert cue_at(cues, 15999).endswith("word29")

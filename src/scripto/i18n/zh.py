@@ -167,6 +167,7 @@ CATALOG: dict[str, str] = {
     "gui.save": "保存",
     "gui.cancel": "取消",
     "gui.play": "播放",
+    "gui.sub_none": "无字幕",
     "gui.player_missing_video": "源视频已不在磁盘上。",
     "gui.history_translate_to": "翻译成{lang}",
     "gui.history_translating": "正在翻译成{lang}…",
