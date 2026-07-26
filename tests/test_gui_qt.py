@@ -153,3 +153,59 @@ def test_paths_are_added_and_removed_one_by_one(tmp_path, qapp):
     page._remove_path(str(media))
     assert page.input_paths == []
     assert page.hint_label.isVisibleTo(page.paths_card)
+
+
+def _seed_history(tmp_path, vm, stem: str) -> str:
+    src = tmp_path / f"{stem}.mp4"
+    src.write_bytes(b"x")
+    srt = tmp_path / f"{stem}.en.srt"
+    srt.write_text(
+        "1\n00:00:01,000 --> 00:00:03,200\nline one\n", encoding="utf-8"
+    )
+    from scripto.core.history import HistoryEntry
+
+    vm.history.append(HistoryEntry(
+        source=str(src), outputs=[{"lang": "en", "format": "srt", "path": str(srt)}],
+        model="tiny", engine="mlx", status="done",
+    ))
+    return str(src)
+
+
+def test_history_delete_single_and_batch(tmp_path, qapp):
+    window = make_window(tmp_path, qapp)
+    a = _seed_history(tmp_path, window.vm, "a")
+    b = _seed_history(tmp_path, window.vm, "b")
+    c = _seed_history(tmp_path, window.vm, "c")
+    page = window.history_page
+    page.refresh()
+
+    page._delete_sources({a})  # single (the per-card ✕ path)
+    assert {g.source for g in window.vm.history_groups()} == {b, c}
+
+    page._toggle_selected(b, True)
+    page._toggle_selected(c, True)
+    assert page.delete_selected_btn.isVisibleTo(page)
+    page._delete_selected()  # batch
+    assert window.vm.history_groups() == []
+
+
+def test_history_viewer_edits_the_file_in_place(tmp_path, qapp):
+    from scripto.gui_qt.history_page import _ViewerDialog
+
+    window = make_window(tmp_path, qapp)
+    _seed_history(tmp_path, window.vm, "talk")
+    group = window.vm.history_groups()[0]
+    dialog = _ViewerDialog(window.history_page, group)
+
+    dialog._start_edit()
+    assert dialog.editor.isVisibleTo(dialog)
+    assert "line one" in dialog.editor.toPlainText()
+    dialog.editor.setPlainText(
+        "1\n00:00:01,000 --> 00:00:03,200\ncorrected line\n"
+    )
+    dialog._save_edit()
+
+    saved = (tmp_path / "talk.en.srt").read_text(encoding="utf-8")
+    assert "corrected line" in saved
+    assert "corrected line" in dialog.body.toPlainText()  # re-rendered
+    assert not dialog.editor.isVisibleTo(dialog)
