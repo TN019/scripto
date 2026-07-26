@@ -472,6 +472,11 @@ class UpdateDialog(QDialog):
                 self.message.setText(
                     self.t("gui.update_check_failed", detail=status.detail)
                 )
+            elif status.branch != status.release_branch:
+                self.message.setText(self.t(
+                    "gui.update_on_branch",
+                    branch=status.branch, main=status.release_branch,
+                ))
             elif status.behind == 0:
                 self.message.setText(self.t("gui.update_uptodate"))
             elif status.dirty:

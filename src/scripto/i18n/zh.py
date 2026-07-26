@@ -149,6 +149,7 @@ CATALOG: dict[str, str] = {
     "gui.update_not_checkout": "当前副本不是从 git 检出运行的，无法自动更新。",
     "gui.update_running": "请先停止正在进行的任务再更新。",
     "gui.update_uptodate": "已是最新版本。",
+    "gui.update_on_branch": "当前检出在分支 {branch} 上——应用内更新只跟踪 {main}。切回 {main} 分支后即可在此更新。",
     "gui.update_behind": "有 {count} 个新提交可更新。",
     "gui.update_dirty": "有 {count} 个新提交，但检出目录有本地改动——请先手动处理（提交或 stash）再更新。",
     "gui.update_restart_note": "更新会拉取最新代码并重启 Scripto；依赖在下次启动时自动同步。",

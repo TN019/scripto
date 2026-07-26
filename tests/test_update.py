@@ -72,3 +72,15 @@ def test_pull_refuses_a_dirty_clone(tmp_path):
     assert not ok
     assert detail == "local changes"
     assert not (clone / "two.txt").exists()
+
+
+def test_check_flags_a_non_release_branch(tmp_path):
+    upstream, clone = _make_pair(tmp_path)
+    _git(clone, "checkout", "-b", "feature")
+    _commit(upstream, "two.txt")
+
+    status = update.check(clone)
+    assert status.ok
+    assert status.branch == "feature"
+    assert status.release_branch == "main"
+    assert status.behind == 1  # informational: main moved on without us
