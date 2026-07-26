@@ -149,6 +149,8 @@ CATALOG: dict[str, str] = {
     "gui.update_not_checkout": "This copy does not run from a git checkout, so it cannot self-update.",
     "gui.update_running": "Stop the current run before updating.",
     "gui.update_uptodate": "Already up to date.",
+    "gui.update_on_branch": "This checkout is on branch {branch}. Updating switches to {main} and pulls the latest code.",
+    "gui.update_branch_dirty": "This checkout is on branch {branch} with local changes — commit or stash them, then update.",
     "gui.update_behind": "{count} new commit(s) available.",
     "gui.update_dirty": "{count} new commit(s) available, but the checkout has local changes — update it manually (commit or stash first).",
     "gui.update_restart_note": "Updating pulls the latest code and restarts Scripto; dependencies sync on the next launch.",

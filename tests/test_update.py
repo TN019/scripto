@@ -72,3 +72,36 @@ def test_pull_refuses_a_dirty_clone(tmp_path):
     assert not ok
     assert detail == "local changes"
     assert not (clone / "two.txt").exists()
+
+
+def test_check_flags_a_non_release_branch(tmp_path):
+    upstream, clone = _make_pair(tmp_path)
+    _git(clone, "checkout", "-b", "feature")
+    _commit(upstream, "two.txt")
+
+    status = update.check(clone)
+    assert status.ok
+    assert status.branch == "feature"
+    assert status.release_branch == "main"
+    assert status.behind == 1  # informational: main moved on without us
+
+
+def test_update_to_release_switches_to_main_and_pulls(tmp_path):
+    upstream, clone = _make_pair(tmp_path)
+    _git(clone, "checkout", "-b", "feature")
+    _commit(upstream, "two.txt")
+
+    ok, _detail = update.update_to_release(clone)
+    assert ok
+    assert _git(clone, "rev-parse", "--abbrev-ref", "HEAD").strip() == "main"
+    assert (clone / "two.txt").is_file()  # latest release code is present
+
+
+def test_update_to_release_refuses_a_dirty_branch(tmp_path):
+    _upstream, clone = _make_pair(tmp_path)
+    _git(clone, "checkout", "-b", "feature")
+    (clone / "wip.txt").write_text("wip", encoding="utf-8")
+
+    ok, detail = update.update_to_release(clone)
+    assert not ok and detail == "local changes"
+    assert _git(clone, "rev-parse", "--abbrev-ref", "HEAD").strip() == "feature"
