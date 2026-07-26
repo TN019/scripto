@@ -411,6 +411,13 @@ class GuiViewModel:
         stale = {e.id for e, exists in self.history_rows() if not exists}
         return self.history.remove(stale) if stale else 0
 
+    def history_delete_sources(self, sources: set[str]) -> int:
+        """Remove every history entry for the given source files.
+
+        Records only — output files on disk are never touched."""
+        ids = {e.id for e in self.history.entries() if e.source in sources}
+        return self.history.remove(ids) if ids else 0
+
     @staticmethod
     def read_preview(path: str, limit: int = 20_000) -> str:
         text = Path(path).read_text(encoding="utf-8", errors="replace")
