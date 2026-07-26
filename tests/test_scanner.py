@@ -83,3 +83,13 @@ def test_stable_order(media_tree):
     first = scanner.scan([str(root)]).files
     second = scanner.scan([str(root)]).files
     assert first == second
+
+
+def test_transport_streams_are_supported(tmp_path):
+    for name in ("recording.ts", "camcorder.m2ts", "clip.mts"):
+        (tmp_path / name).write_bytes(b"x")
+    result = scanner.scan([str(tmp_path)], recursive=False)
+    assert [p.name for p in result.files] == [
+        "camcorder.m2ts", "clip.mts", "recording.ts",
+    ]
+    assert result.warnings == []

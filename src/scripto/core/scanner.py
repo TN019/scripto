@@ -17,7 +17,8 @@ from urllib.parse import unquote, urlparse
 
 from .errors import OperationStopped
 
-VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".mkv", ".webm"}
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".mkv", ".webm",
+                    ".ts", ".m2ts", ".mts"}  # MPEG transport streams
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".wav", ".aac", ".flac"}
 DEFAULT_EXTENSIONS = VIDEO_EXTENSIONS | AUDIO_EXTENSIONS
 
