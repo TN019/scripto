@@ -106,3 +106,32 @@ def test_transcribe_language_lives_on_the_run_page(tmp_path, qapp):
     assert window.vm.get_config()["transcribe_language"] == "ja"
     # The start-Ollama affordance exists and stays hidden until needed.
     assert not window.run_page.ollama_btn.isVisible()
+
+
+def test_history_viewer_renders_srt_as_transcript(tmp_path, qapp):
+    from scripto.core.history import HistoryEntry
+    from scripto.gui_qt.history_page import _ViewerDialog
+
+    src = tmp_path / "talk.mp4"
+    src.write_bytes(b"x")
+    srt = tmp_path / "talk.en.srt"
+    srt.write_text(
+        "1\n00:00:01,000 --> 00:00:03,200\nhello there\n\n"
+        "2\n00:00:03,600 --> 00:00:06,900\nsecond line\n",
+        encoding="utf-8",
+    )
+    window = make_window(tmp_path, qapp)
+    window.vm.history.append(HistoryEntry(
+        source=str(src), outputs=[{"lang": "en", "format": "srt", "path": str(srt)}],
+        model="tiny", engine="mlx", status="done",
+    ))
+    dialog = _ViewerDialog(window.history_page, window.vm.history_groups()[0])
+    text = dialog.body.toPlainText()
+    assert "hello there" in text and "second line" in text
+    assert "-->" not in text and ",000" not in text  # raw cue syntax is gone
+    assert "00:00:01 → 00:00:03" in text
+    # No ghost buttons: exactly one generation exists after two rebuilds.
+    from PySide6.QtWidgets import QPushButton
+
+    labels = [b.text() for b in dialog.findChildren(QPushButton)]
+    assert labels.count(window.lang_label("en")) == 1

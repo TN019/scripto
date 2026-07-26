@@ -3,18 +3,22 @@ that switches languages and can translate missing ones (R5)."""
 
 from __future__ import annotations
 
+import re
+from html import escape
 from pathlib import Path
 
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
-    QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
+
+_MS_RE = re.compile(r"[,.]\d{3}")
 
 from .widgets import ElidedLabel, card, clear_layout, reveal_in_file_manager, subtext
 
@@ -143,9 +147,10 @@ class _ViewerDialog(QDialog):
         self.lang_row.setSpacing(6)
         self.lang_row.addStretch(1)
         self.status_label = subtext()
-        self.body = QPlainTextEdit()
-        self.body.setReadOnly(True)
+        self.body = QTextBrowser()
+        self.body.setOpenExternalLinks(False)
         self.body.setProperty("role", "preview")
+        self.body.setFrameShape(QTextBrowser.Shape.NoFrame)
 
         close_btn = QPushButton(self.t("gui.close"))
         close_btn.clicked.connect(self.accept)
@@ -191,11 +196,38 @@ class _ViewerDialog(QDialog):
 
     def _load(self, lang: str) -> None:
         self.lang = lang
+        path = self.group.existing[lang]
         try:
-            self.body.setPlainText(self.vm.read_preview(self.group.existing[lang]))
+            self._render(self.vm.read_preview(path), path)
         except Exception as exc:
             self.body.setPlainText(str(exc))
         self._rebuild_buttons()
+
+    def _render(self, content: str, path: str) -> None:
+        """Subtitles read like a transcript, not like the raw file format:
+        one block per cue, dim second-precision time range, normal text."""
+        tokens = self.page.window_ref.palette_tokens
+        if not path.endswith(".srt"):
+            self.body.setHtml(
+                f'<pre style="color:{tokens.text}; font-size:12px;">'
+                f"{escape(content)}</pre>"
+            )
+            return
+
+        from ..translate.srt import parse_srt
+
+        parts = []
+        for block in parse_srt(content):
+            start, _, end = block.timestamp.partition("-->")
+            stamp = f"{_MS_RE.sub('', start).strip()} → {_MS_RE.sub('', end).strip()}"
+            text = escape(block.text).replace("\n", "<br>")
+            parts.append(
+                f'<p style="margin:0 0 4px 0;">'
+                f'<span style="color:{tokens.subtext}; font-size:11px;">{stamp}</span>'
+                f"</p>"
+                f'<p style="margin:0 0 14px 0; color:{tokens.text};">{text}</p>'
+            )
+        self.body.setHtml("".join(parts) or escape(content))
 
     def _translate(self, lang: str) -> None:
         if self.busy:
@@ -227,10 +259,9 @@ class _ViewerDialog(QDialog):
                 self.busy = False
                 self.status_label.setText(status_text)
                 if self.lang in self.group.existing:
+                    path = self.group.existing[self.lang]
                     try:
-                        self.body.setPlainText(
-                            self.vm.read_preview(self.group.existing[self.lang])
-                        )
+                        self._render(self.vm.read_preview(path), path)
                     except Exception:
                         pass
                 self._rebuild_buttons()

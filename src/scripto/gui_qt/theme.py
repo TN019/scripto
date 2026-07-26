@@ -196,6 +196,10 @@ QPlainTextEdit[role="log"], QPlainTextEdit[role="preview"] {{
     font-family: Menlo, Consolas, monospace;
     font-size: 11px;
 }}
+QTextBrowser[role="preview"] {{
+    background: {p.sunken};
+    padding: 10px 12px;
+}}
 QComboBox {{
     background: {p.surface};
     border: 1px solid {p.border};
@@ -218,20 +222,10 @@ QComboBox QAbstractItemView {{
     selection-color: {p.text};
     outline: none;
 }}
+/* Checkbox indicators stay native (Fusion + our QPalette): the style
+   draws a real check mark, which custom QSS boxes cannot. */
 QCheckBox {{
     spacing: 7px;
-}}
-QCheckBox::indicator {{
-    width: 16px;
-    height: 16px;
-    border: 1px solid {p.border};
-    border-radius: 5px;
-    background: {p.window};
-}}
-QCheckBox::indicator:checked {{
-    background: {p.accent};
-    border-color: {p.accent};
-    image: url(none);
 }}
 
 /* ---- progress --------------------------------------------------------- */
