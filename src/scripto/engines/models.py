@@ -84,6 +84,21 @@ def repo_for(spec: WhisperModelSpec, engine_name: str) -> str:
     )
 
 
+def _hf_cache_dir() -> str | None:
+    """HF cache path from the environment, resolved at call time.
+
+    huggingface_hub freezes HF_HOME/HF_HUB_CACHE into constants on first
+    import, so relying on its default would make the effective cache depend
+    on import order (and ignore env changes — which is also what lets tests
+    point at an empty cache). None = the library default.
+    """
+    hub = os.environ.get("HF_HUB_CACHE")
+    if hub:
+        return hub
+    home = os.environ.get("HF_HOME")
+    return str(Path(home) / "hub") if home else None
+
+
 def _cached_repo_ids() -> set[str]:
     """One scan of the HF cache; empty set when the cache does not exist."""
     try:
@@ -91,7 +106,7 @@ def _cached_repo_ids() -> set[str]:
         from huggingface_hub.errors import CacheNotFound
 
         try:
-            info = scan_cache_dir()
+            info = scan_cache_dir(_hf_cache_dir())
         except CacheNotFound:
             return set()
         return {repo.repo_id for repo in info.repos}
@@ -126,7 +141,9 @@ def download_model(
     logger.info("downloading %s (%s)", repo, spec.size_hint)
     # token=False: anonymous access for public repos; a stale HF_TOKEN env var
     # otherwise surfaces as a misleading 401 (lesson from my-transcriptor).
-    snapshot_download(repo_id=repo, token=False, tqdm_class=_Progress)
+    snapshot_download(
+        repo_id=repo, token=False, tqdm_class=_Progress, cache_dir=_hf_cache_dir()
+    )
 
 
 def delete_model(spec: WhisperModelSpec, engine_name: str) -> bool:
@@ -136,7 +153,7 @@ def delete_model(spec: WhisperModelSpec, engine_name: str) -> bool:
 
     repo = repo_for(spec, engine_name)
     try:
-        info = scan_cache_dir()
+        info = scan_cache_dir(_hf_cache_dir())
     except CacheNotFound:
         return False
     hashes = [

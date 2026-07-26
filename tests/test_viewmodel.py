@@ -255,4 +255,4 @@ def test_first_run_detection(tmp_path):
 
 
 def test_gui_module_imports():
-    import scripto.gui.app_gui  # noqa: F401  (catches flet API drift at import time)
+    import scripto.gui_qt.main_window  # noqa: F401  (catches Qt API drift at import time)

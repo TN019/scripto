@@ -27,10 +27,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>LSMinimumSystemVersion</key><string>12.0</string>
     <key>NSHighResolutionCapable</key><true/>
-    <!-- The launcher only execs `uv run scripto`; the visible Dock icon is
-         the branded viewer the GUI opens. Hiding the launcher from the Dock
-         leaves exactly one Scripto icon. -->
-    <key>LSUIElement</key><true/>
+    <!-- The launcher execs `uv run scripto`, and `uv run` execs python, so
+         the Qt GUI process *is* this bundle's process: the Dock entry below
+         carries Scripto's name and icon with no runtime branding. -->
 </dict>
 </plist>
 PLIST

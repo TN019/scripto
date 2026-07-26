@@ -110,3 +110,33 @@ def test_pull_reports_progress_and_errors():
     client = make_client(failing_stream)
     with pytest.raises(ScriptoError):
         client.pull("m")
+
+
+def test_start_server_reports_missing_ollama(monkeypatch, tmp_path):
+    from scripto.translate import ollama as mod
+
+    monkeypatch.setattr(mod, "MAC_APP", tmp_path / "missing.app")
+    monkeypatch.setattr("shutil.which", lambda _name: None)
+    ok, detail = mod.start_server()
+    assert ok is False
+    assert "not installed" in detail
+
+
+def test_start_server_spawns_detached_serve(monkeypatch, tmp_path):
+    from scripto.translate import ollama as mod
+
+    monkeypatch.setattr(mod, "MAC_APP", tmp_path / "missing.app")
+    monkeypatch.setattr("shutil.which", lambda _name: str(tmp_path / "ollama"))
+    seen = {}
+
+    def fake_popen(cmd, **kwargs):
+        seen["cmd"] = cmd
+        seen["kwargs"] = kwargs
+        return object()
+
+    monkeypatch.setattr(mod.subprocess, "Popen", fake_popen)
+    ok, detail = mod.start_server(log_path=tmp_path / "ollama.log")
+    assert ok is True and detail == ""
+    assert seen["cmd"][1] == "serve"
+    # Detached from our session: survives Scripto quitting.
+    assert seen["kwargs"].get("start_new_session") or seen["kwargs"].get("creationflags")
