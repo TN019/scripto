@@ -497,6 +497,10 @@ class UpdateDialog(QDialog):
                 self.note.setText(self.t("gui.update_restart_note"))
                 self.note.show()
                 self.update_btn.show()
+            # The dialog was sized for the short "checking…" text; grow to
+            # fit the (word-wrapped) result or the message gets clipped.
+            self.layout().activate()
+            self.adjustSize()
 
         window.run_in_main(apply)
 
