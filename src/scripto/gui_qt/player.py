@@ -16,11 +16,13 @@ from PySide6.QtCore import Qt, QUrl
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSizePolicy,
     QSlider,
     QVBoxLayout,
     QWidget,
@@ -76,7 +78,11 @@ class PlayerDialog(QDialog):
         super().__init__(parent)
         self.window_ref = window
         self.setWindowTitle(Path(video_path).name)
-        self.resize(920, 600)
+        screen = QApplication.primaryScreen().availableGeometry()
+        self.resize(
+            min(920, int(screen.width() * 0.8)),
+            min(600, int(screen.height() * 0.8)),
+        )
 
         self.cues: list[Cue] = []
         if srt_path:
@@ -93,6 +99,10 @@ class PlayerDialog(QDialog):
         self.audio = QAudioOutput(self)
         self.player.setAudioOutput(self.audio)
         video = QVideoWidget()
+        # Once media loads, QVideoWidget's sizeHint becomes the video's
+        # native resolution — a 4K/retina recording would balloon the whole
+        # dialog. Ignore the hint: the widget fills whatever space we give.
+        video.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
         self.player.setVideoOutput(video)
 
         self.subtitle = QLabel("")
