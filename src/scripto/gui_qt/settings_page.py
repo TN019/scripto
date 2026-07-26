@@ -432,7 +432,10 @@ class UpdateDialog(QDialog):
         self.page = page
         self.t = page.t
         self.setWindowTitle(self.t("gui.update_title"))
-        self.setMinimumWidth(440)
+        # Fixed width: with word-wrapping labels, a free-width dialog sizes
+        # itself to the unwrapped single-line text and then clips the
+        # wrapped result. _fit() computes the height for this width.
+        self.setFixedWidth(500)
 
         self.message = QLabel(self.t("gui.update_checking"))
         self.message.setWordWrap(True)
@@ -497,14 +500,27 @@ class UpdateDialog(QDialog):
                 self.note.setText(self.t("gui.update_restart_note"))
                 self.note.show()
                 self.update_btn.show()
+            self._fit()
 
         window.run_in_main(apply)
+
+    def _fit(self) -> None:
+        """Grow the dialog to the wrapped height of its labels."""
+        margins = self.layout().contentsMargins()
+        content = self.width() - margins.left() - margins.right()
+        self.message.setMinimumHeight(self.message.heightForWidth(content))
+        self.note.setMinimumHeight(
+            0 if self.note.isHidden() else self.note.heightForWidth(content)
+        )
+        self.layout().activate()
+        self.resize(self.width(), self.layout().sizeHint().height())
 
     def _do_update(self) -> None:
         from ..core import update as up
 
         self.update_btn.setEnabled(False)
         self.message.setText(self.t("gui.update_pulling"))
+        self._fit()
         window = self.page.window_ref
         root = up.repo_root()
 
@@ -515,6 +531,7 @@ class UpdateDialog(QDialog):
                 if not ok:
                     self.update_btn.setEnabled(True)
                     self.message.setText(self.t("gui.update_failed", detail=detail))
+                    self._fit()
                     return
                 # New instance boots with the pulled code; this one exits.
                 up.spawn_restart(root)
