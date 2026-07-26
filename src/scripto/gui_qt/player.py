@@ -1,9 +1,14 @@
 """Built-in media player: the source video with live subtitles from the SRT.
 
-Subtitles are drawn by us (labels overlaid on the video), not by the media
-backend: that keeps every produced language selectable and renders exactly
-what the .srt on disk says — including edits the user just made. Qt 6 ships
-the FFmpeg media backend, so mkv/mp4/m4a all play.
+Subtitles are drawn by us, not by the media backend: that keeps every
+produced language selectable and renders exactly what the .srt on disk says
+— including edits the user just made. Qt 6 ships the FFmpeg media backend,
+so mkv/mp4/m4a all play.
+
+Rendering goes through QGraphicsView + QGraphicsVideoItem, NOT QVideoWidget:
+the widget is a native window on macOS, so sibling widgets can never paint
+on top of it — subtitles overlaid that way show up headless but silently
+vanish on a real display. Scene items composite correctly everywhere.
 
 Display rules:
 - One subtitle track: shown as-is. Two: stacked, primary over secondary.
@@ -20,21 +25,22 @@ import bisect
 import re
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import QSizeF, Qt, QUrl
+from PySide6.QtGui import QColor, QFont, QTextOption
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
-from PySide6.QtMultimediaWidgets import QVideoWidget
+from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QDialog,
-    QGridLayout,
+    QGraphicsRectItem,
+    QGraphicsScene,
+    QGraphicsTextItem,
+    QGraphicsView,
     QHBoxLayout,
-    QLabel,
     QPushButton,
-    QSizePolicy,
     QSlider,
     QVBoxLayout,
-    QWidget,
 )
 
 from ..translate.srt import parse_srt
@@ -125,6 +131,24 @@ def format_ms(ms: int) -> str:
     return f"{minutes}:{secs:02d}"
 
 
+class _StageView(QGraphicsView):
+    """Black letterbox stage; notifies the dialog on every resize."""
+
+    def __init__(self, on_resize):
+        super().__init__()
+        self._on_resize = on_resize
+        self.setFrameShape(QGraphicsView.Shape.NoFrame)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # setBackgroundBrush, not QSS: stylesheets do not reliably reach a
+        # QGraphicsView viewport.
+        self.setBackgroundBrush(QColor(0, 0, 0))
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._on_resize()
+
+
 class PlayerDialog(QDialog):
     def __init__(self, parent, window, video_path: str,
                  tracks: dict[str, str] | None = None):
@@ -153,39 +177,44 @@ class PlayerDialog(QDialog):
         self.player = QMediaPlayer(self)
         self.audio = QAudioOutput(self)
         self.player.setAudioOutput(self.audio)
-        video = QVideoWidget()
-        # Once media loads, QVideoWidget's sizeHint becomes the video's
-        # native resolution — a 4K/retina recording would balloon the whole
-        # dialog. Ignore the hint: the widget fills whatever space we give.
-        video.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
-        self.player.setVideoOutput(video)
 
-        sub_style = (
-            "background: rgba(0, 0, 0, 168); color: white; font-size: {}px;"
-            "padding: 4px 12px; border-radius: 7px;"
-        )
-        self.sub_labels = [QLabel(""), QLabel("")]
-        for i, label in enumerate(self.sub_labels):
-            label.setWordWrap(True)
-            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            label.setStyleSheet(sub_style.format(16 if i == 0 else 14))
-            label.hide()
-        sub_stack = QWidget()
-        sub_box = QVBoxLayout(sub_stack)
-        sub_box.setContentsMargins(0, 0, 0, 22)
-        sub_box.setSpacing(4)
-        for label in self.sub_labels:
-            sub_box.addWidget(label, 0, Qt.AlignmentFlag.AlignHCenter)
+        # Scene-based rendering; see the module docstring for why not
+        # QVideoWidget. The video item is resized to the viewport (aspect
+        # kept inside), subtitle items float above it as scene children.
+        self.view = _StageView(self._relayout_stage)
+        scene = QGraphicsScene(self)
+        self.view.setScene(scene)
+        self.video_item = QGraphicsVideoItem()
+        self.video_item.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio)
+        scene.addItem(self.video_item)
+        self.player.setVideoOutput(self.video_item)
 
-        stage = QWidget()
-        stage.setStyleSheet("background: black;")
-        grid = QGridLayout(stage)
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.addWidget(video, 0, 0)
-        grid.addWidget(
-            sub_stack, 0, 0,
-            Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter,
-        )
+        # QGraphicsTextItem ignores CSS backgrounds — each subtitle is a
+        # white text item over its own translucent backdrop rect.
+        self.sub_items: list[QGraphicsTextItem] = []
+        self.sub_backdrops: list[QGraphicsRectItem] = []
+        for i in range(2):
+            backdrop = QGraphicsRectItem()
+            backdrop.setBrush(QColor(0, 0, 0, 180))
+            backdrop.setPen(Qt.PenStyle.NoPen)
+            backdrop.setZValue(9)
+            backdrop.hide()
+            scene.addItem(backdrop)
+            self.sub_backdrops.append(backdrop)
+
+            item = QGraphicsTextItem()
+            item.setDefaultTextColor(QColor(255, 255, 255))
+            font = QFont()
+            font.setPixelSize(16 if i == 0 else 14)
+            item.setFont(font)
+            option = QTextOption()
+            option.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            item.document().setDefaultTextOption(option)
+            item.document().setDocumentMargin(5)
+            item.setZValue(10)
+            item.hide()
+            scene.addItem(item)
+            self.sub_items.append(item)
 
         # Controls: skip / play / skip · slider · time · rate · subtitles
         self.back_btn = QPushButton("⏪ 10")
@@ -243,10 +272,11 @@ class PlayerDialog(QDialog):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-        root.addWidget(stage, 1)
+        root.addWidget(self.view, 1)
         root.addLayout(controls)
 
         self._sync_tracks()
+        self.video_item.nativeSizeChanged.connect(lambda _s: self._relayout_stage())
         self.player.positionChanged.connect(self._on_position)
         self.player.durationChanged.connect(lambda d: self.slider.setRange(0, int(d)))
         self.player.playbackStateChanged.connect(self._on_state)
@@ -299,13 +329,66 @@ class PlayerDialog(QDialog):
         )
 
     def _update_subtitles(self, ms: int) -> None:
+        changed = False
         for i, cues in enumerate(self._active[:2]):
             text = cue_at(cues, ms) if cues else ""
             if text == self._current[i]:
                 continue
             self._current[i] = text
-            self.sub_labels[i].setText(text)
-            self.sub_labels[i].setVisible(bool(text))
+            changed = True
+            item = self.sub_items[i]
+            if not text:
+                item.hide()
+                self.sub_backdrops[i].hide()
+                continue
+            item.setPlainText(text)
+            doc = item.document()
+            doc.setTextWidth(-1)  # measure the natural single-line width…
+            max_width = self.view.viewport().width() * 0.86
+            if doc.idealWidth() > max_width:  # …then wrap only when needed
+                doc.setTextWidth(max_width)
+            item.show()
+            self.sub_backdrops[i].show()
+        if changed:
+            self._position_subtitles()
+
+    def _relayout_stage(self) -> None:
+        viewport = self.view.viewport().size()
+        self.view.scene().setSceneRect(0, 0, viewport.width(), viewport.height())
+        # Size the item to the aspect-fitted video rect ourselves instead of
+        # the whole viewport: the item's internal letterbox area is not
+        # reliably transparent on every render path, the scene background is.
+        native = self.video_item.nativeSize()
+        if native.isValid() and native.width() > 0 and native.height() > 0:
+            scale = min(viewport.width() / native.width(),
+                        viewport.height() / native.height())
+            width = native.width() * scale
+            height = native.height() * scale
+        else:
+            width, height = viewport.width(), viewport.height()
+        self.video_item.setSize(QSizeF(width, height))
+        self.video_item.setPos(
+            (viewport.width() - width) / 2, (viewport.height() - height) / 2
+        )
+        self._position_subtitles()
+        # The area the video item vacated is not reliably repainted by
+        # damage tracking alone (stale-pixel bands on some render paths).
+        self.view.viewport().update()
+
+    def _position_subtitles(self) -> None:
+        width = self.view.viewport().width()
+        y = self.view.viewport().height() - 20
+        # Bottom-up: the secondary track hugs the bottom, primary above it.
+        for item, backdrop in zip(reversed(self.sub_items),
+                                  reversed(self.sub_backdrops)):
+            if not item.isVisible():
+                continue
+            rect = item.boundingRect()
+            y -= rect.height()
+            x = (width - rect.width()) / 2
+            item.setPos(x, y)
+            backdrop.setRect(x - 6, y - 1, rect.width() + 12, rect.height() + 2)
+            y -= 6
 
     def closeEvent(self, event) -> None:  # noqa: N802
         self.player.stop()
