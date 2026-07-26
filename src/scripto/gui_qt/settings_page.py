@@ -432,7 +432,10 @@ class UpdateDialog(QDialog):
         self.page = page
         self.t = page.t
         self.setWindowTitle(self.t("gui.update_title"))
-        self.setMinimumWidth(440)
+        # Fixed width: with word-wrapping labels, a free-width dialog sizes
+        # itself to the unwrapped single-line text and then clips the
+        # wrapped result. _fit() computes the height for this width.
+        self.setFixedWidth(500)
 
         self.message = QLabel(self.t("gui.update_checking"))
         self.message.setWordWrap(True)
@@ -497,14 +500,37 @@ class UpdateDialog(QDialog):
                 self.note.setText(self.t("gui.update_restart_note"))
                 self.note.show()
                 self.update_btn.show()
+            self._fit()
 
         window.run_in_main(apply)
+
+    def _fit(self) -> None:
+        """Grow the dialog to the wrapped height of its labels.
+
+        Measured with QFontMetrics at each label's real laid-out width —
+        QLabel.heightForWidth underestimates CJK wrapping by half a line on
+        some font/DPI combinations, which showed up as clipped text.
+        """
+        for label in (self.message, self.note):
+            label.setMinimumHeight(0)
+        self.layout().activate()
+        for label in (self.message, self.note):
+            if label.isHidden() or not label.text():
+                continue
+            rect = label.fontMetrics().boundingRect(
+                0, 0, max(50, label.width()), 100_000,
+                Qt.TextFlag.TextWordWrap, label.text(),
+            )
+            label.setMinimumHeight(rect.height() + 6)
+        self.layout().activate()
+        self.resize(self.width(), self.layout().sizeHint().height() + 4)
 
     def _do_update(self) -> None:
         from ..core import update as up
 
         self.update_btn.setEnabled(False)
         self.message.setText(self.t("gui.update_pulling"))
+        self._fit()
         window = self.page.window_ref
         root = up.repo_root()
 
@@ -515,6 +541,7 @@ class UpdateDialog(QDialog):
                 if not ok:
                     self.update_btn.setEnabled(True)
                     self.message.setText(self.t("gui.update_failed", detail=detail))
+                    self._fit()
                     return
                 # New instance boots with the pulled code; this one exits.
                 up.spawn_restart(root)
