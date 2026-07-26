@@ -472,11 +472,18 @@ class UpdateDialog(QDialog):
                 self.message.setText(
                     self.t("gui.update_check_failed", detail=status.detail)
                 )
+            elif status.dirty and status.branch != status.release_branch:
+                self.message.setText(self.t(
+                    "gui.update_branch_dirty", branch=status.branch,
+                ))
             elif status.branch != status.release_branch:
                 self.message.setText(self.t(
                     "gui.update_on_branch",
                     branch=status.branch, main=status.release_branch,
                 ))
+                self.note.setText(self.t("gui.update_restart_note"))
+                self.note.show()
+                self.update_btn.show()
             elif status.behind == 0:
                 self.message.setText(self.t("gui.update_uptodate"))
             elif status.dirty:
@@ -502,7 +509,7 @@ class UpdateDialog(QDialog):
         root = up.repo_root()
 
         def job() -> None:
-            ok, detail = up.pull(root)
+            ok, detail = up.update_to_release(root)
 
             def apply() -> None:
                 if not ok:

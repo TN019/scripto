@@ -82,6 +82,24 @@ def pull(root: Path) -> tuple[bool, str]:
     return True, _last_line(proc.stdout)
 
 
+def update_to_release(root: Path) -> tuple[bool, str]:
+    """Checkout the release branch (if needed) and fast-forward it.
+
+    The one entry point the GUI's Update button uses: from main it is just
+    a pull; from a dev branch it switches to main first. Same safety
+    contract as pull() — a dirty tree is refused, never touched.
+    """
+    if _is_dirty(root):
+        return False, "local changes"
+    release = _release_branch(root)
+    current = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
+    if current.stdout.strip() != release:
+        proc = _git(root, "checkout", release, timeout=120)
+        if proc.returncode != 0:
+            return False, _last_line(proc.stderr)
+    return pull(root)
+
+
 def spawn_restart(root: Path) -> None:
     """Starts a fresh detached ``uv run scripto``; the caller then closes
     this instance. The new process re-resolves dependencies, so a pulled
