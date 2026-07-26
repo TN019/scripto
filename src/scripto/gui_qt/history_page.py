@@ -287,10 +287,16 @@ class _ViewerDialog(QDialog):
                 self.t("gui.player_missing_video"), ok=False
             )
             return
-        srt = self.group.existing.get(self.lang or "", "")
+        # Current viewing language first — it becomes the primary subtitle.
+        ordered = sorted(
+            self.group.existing.items(), key=lambda kv: kv[0] != self.lang
+        )
+        tracks = {
+            self.page.window_ref.lang_label(lang): path
+            for lang, path in ordered if path.endswith(".srt")
+        }
         PlayerDialog(
-            self, self.page.window_ref, self.group.source,
-            srt if srt.endswith(".srt") else None,
+            self, self.page.window_ref, self.group.source, tracks
         ).exec()
 
     # ------------------------------------------------------------------ #
