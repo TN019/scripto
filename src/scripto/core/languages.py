@@ -16,6 +16,10 @@ class LanguageSpec:
     code: str          # config value, e.g. "zh"
     prompt_name: str   # name used inside translation prompts
     suffix: str        # filename suffix, e.g. ".zh"
+    # Foreign suffixes accepted as this language when *detecting* existing
+    # outputs (subtitles named by other tools / by hand). Writing always
+    # uses ``suffix``.
+    aliases: tuple[str, ...] = ()
 
 
 _REGISTRY: dict[str, LanguageSpec] = {}
@@ -43,7 +47,18 @@ def suffix_map() -> dict[str, str]:
     return {spec.code: spec.suffix for spec in _REGISTRY.values()}
 
 
-register_language(LanguageSpec(code="en", prompt_name="English", suffix=".en"))
-register_language(LanguageSpec(code="zh", prompt_name="Simplified Chinese", suffix=".zh"))
+def alias_suffixes(code: str) -> tuple[str, ...]:
+    """Detection-only suffixes for ``code`` (empty for unknown codes)."""
+    spec = _REGISTRY.get(code)
+    return spec.aliases if spec else ()
+
+
+register_language(LanguageSpec(
+    code="en", prompt_name="English", suffix=".en", aliases=(".eng",),
+))
+register_language(LanguageSpec(
+    code="zh", prompt_name="Simplified Chinese", suffix=".zh",
+    aliases=(".cn", ".chs", ".zh-cn", ".zh-hans", ".zh_cn"),
+))
 register_language(LanguageSpec(code="ja", prompt_name="Japanese", suffix=".ja"))
 register_language(LanguageSpec(code="ko", prompt_name="Korean", suffix=".ko"))

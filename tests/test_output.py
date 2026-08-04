@@ -77,3 +77,17 @@ def test_vtt_txt_json_writers(tmp_path):
     payload = json.loads((tmp_path / "o.json").read_text(encoding="utf-8"))
     assert payload["language"] == "en"
     assert len(payload["segments"]) == 2
+
+
+def test_existing_transcript_accepts_alias_suffixes(tmp_path):
+    from scripto.core.output import existing_transcript
+
+    source = tmp_path / "lecture.mp4"
+    source.write_bytes(b"x")
+    (tmp_path / "lecture.cn.srt").write_text("1\n", encoding="utf-8")
+
+    forced = existing_transcript(source, fmt="srt", language="zh")
+    assert forced is not None and forced.name == "lecture.cn.srt"
+    auto = existing_transcript(source, fmt="srt", language=None)
+    assert auto is not None and auto.name == "lecture.cn.srt"
+    assert existing_transcript(source, fmt="srt", language="ja") is None
