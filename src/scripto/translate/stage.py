@@ -64,8 +64,13 @@ class OllamaTranslateStage:
         if out_path == srt_path:
             # transcript already carries the target language suffix — nothing to do
             return []
-        if out_path.exists() and not self._overwrite:
-            return [out_path]
+        if not self._overwrite:
+            # Accept alias-named files (lecture.cn.srt dropped in by hand or
+            # by another tool) as the existing translation — never redo it.
+            for suffix in (self._target.suffix, *self._target.aliases):
+                candidate = source.with_name(f"{source.stem}{suffix}.srt")
+                if candidate != srt_path and candidate.exists():
+                    return [candidate]
 
         content = srt_path.read_text(encoding="utf-8")
         translated = self.translate_content(content, stop_check=stop_check, progress=progress)

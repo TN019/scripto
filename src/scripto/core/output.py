@@ -16,7 +16,7 @@ import json
 from pathlib import Path
 
 from ..engines.base import TranscribeResult
-from .languages import suffix_map
+from .languages import alias_suffixes, known_languages, suffix_map
 
 DEFAULT_SUFFIXES = suffix_map()  # single source of truth: core/languages.py
 FORMATS = ("srt", "txt", "vtt", "json")
@@ -64,14 +64,22 @@ def existing_transcript(
     Export-dir runs always re-check the exact default name only.
     """
     suffixes = suffix_map or DEFAULT_SUFFIXES
+    directory = export_dir if export_dir is not None else source.parent
     if language:
         path = output_path(
             source, language=language, fmt=fmt,
             suffix_map=suffix_map, export_dir=export_dir,
         )
-        return path if path.exists() else None
-    directory = export_dir if export_dir is not None else source.parent
-    for suffix in suffixes.values():
+        if path.exists():
+            return path
+        for suffix in alias_suffixes(language):
+            candidate = directory / f"{source.stem}{suffix}.{fmt}"
+            if candidate.exists():
+                return candidate
+        return None
+    detect = list(suffixes.values())
+    detect += [a for spec in known_languages() for a in spec.aliases]
+    for suffix in detect:
         candidate = directory / f"{source.stem}{suffix}.{fmt}"
         if candidate.exists():
             return candidate

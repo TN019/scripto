@@ -157,3 +157,21 @@ def test_release_unloads_model(tmp_path):
     stage, _src, _srt = make_stage(client, tmp_path)
     stage.release()
     assert client.unloaded
+
+
+def test_translate_skips_when_alias_named_translation_exists(tmp_path):
+    # A hand-dropped lecture.cn.srt counts as the zh translation: returned
+    # as-is, nothing sent to the model.
+    source = tmp_path / "lecture.mp4"
+    source.write_bytes(b"x")
+    transcript = tmp_path / "lecture.en.srt"
+    transcript.write_text(SAMPLE, encoding="utf-8")
+    existing = tmp_path / "lecture.cn.srt"
+    existing.write_text(SAMPLE, encoding="utf-8")
+
+    client = FakeClient()
+    stage = OllamaTranslateStage(client, model="m", target="zh")
+    out = stage.translate(transcript, source)
+
+    assert out == [existing]
+    assert client.calls == []
