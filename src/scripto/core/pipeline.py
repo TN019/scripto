@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import queue
 import threading
@@ -253,7 +254,8 @@ class Pipeline:
                     self._engine.load(self._s.model)
                     loaded = True
                 result = self._transcribe(wav, job, stop)
-                result.segments, _ = cleanup.clean_segments(result.segments)
+                cleaned, _ = cleanup.clean_segments(result.segments)
+                result = dataclasses.replace(result, segments=cleaned)
                 job.language = result.language or self._s.language
                 target = out.output_path(
                     job.source, language=job.language, fmt=self._s.fmt,
