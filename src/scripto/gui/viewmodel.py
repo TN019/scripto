@@ -8,9 +8,10 @@ full-rebuild-per-event mistake is structurally impossible here.
 
 from __future__ import annotations
 
+import queue as queue_mod
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable
 
@@ -71,6 +72,23 @@ class HistoryGroup:
 
 
 @dataclass
+class TranslationJob:
+    """One queued history translation; mutated by the worker, read by the UI."""
+    source: str
+    name: str
+    srt_path: str
+    target: str
+    status: str = "queued"   # queued | running | done | failed
+    done: int = 0            # translated blocks so far
+    total: int = 0
+    error: str = ""
+
+    @property
+    def fraction(self) -> float:
+        return self.done / self.total if self.total else 0.0
+
+
+@dataclass
 class DrainResult:
     changed_rows: list[int] = field(default_factory=list)
     log_lines: list[str] = field(default_factory=list)
@@ -103,6 +121,12 @@ class GuiViewModel:
         # ETA bookkeeping: wall time of completed files this batch
         self._durations: list[float] = []
         self._active_since: float | None = None
+
+        # History-translation queue: one worker, jobs survive any dialog.
+        self.translation_jobs: list[TranslationJob] = []
+        self._translation_q: "queue_mod.Queue[TranslationJob]" = queue_mod.Queue()
+        self._translation_worker: threading.Thread | None = None
+        self._translation_lock = threading.Lock()
 
     # ------------------------------------------------------------------ #
     # Input / scanning (call from a background thread; never the UI thread)
@@ -377,6 +401,15 @@ class GuiViewModel:
         the view runs this on a worker thread); records a history entry."""
         if not group.translate_from:
             return []
+        return self._run_translation(
+            srt_path=group.translate_from, source=group.source,
+            target=target, progress=None,
+        )
+
+    def _run_translation(
+        self, *, srt_path: str, source: str, target: str,
+        progress: Callable[[int, int], None] | None,
+    ) -> list[Path]:
         config = self.get_config()
         client = OllamaClient(config["ollama_url"])
         stage = OllamaTranslateStage(
@@ -389,14 +422,17 @@ class GuiViewModel:
         )
         try:
             produced = stage.translate(
-                Path(group.translate_from), Path(group.source),
-                stop_check=None, progress=None,
+                Path(srt_path), Path(source),
+                stop_check=None, progress=progress,
             )
         finally:
-            stage.release()
+            # Keep the model loaded while more jobs wait; keep_alive handles
+            # eviction once the queue actually drains.
+            if self._translation_q.empty():
+                stage.release()
         if produced:
             self.history.append(HistoryEntry(
-                source=group.source,
+                source=source,
                 outputs=[
                     {"lang": target, "format": p.suffix.lstrip("."), "path": str(p)}
                     for p in produced
@@ -406,6 +442,63 @@ class GuiViewModel:
                 status="done",
             ))
         return produced
+
+    # ------------------------------------------------------------------ #
+    # Translation queue: batch/single history translations with status
+    # ------------------------------------------------------------------ #
+
+    def queue_translation(self, group: "HistoryGroup", target: str) -> bool:
+        """Enqueue a history translation; False when duplicate or invalid."""
+        if not group.translate_from or target in group.existing:
+            return False
+        with self._translation_lock:
+            for job in self.translation_jobs:
+                if (job.source == group.source and job.target == target
+                        and job.status in ("queued", "running")):
+                    return False
+            job = TranslationJob(
+                source=group.source, name=group.name,
+                srt_path=group.translate_from, target=target,
+            )
+            self.translation_jobs.append(job)
+            self._translation_q.put(job)
+            self._ensure_translation_worker()
+        return True
+
+    def translation_snapshot(self) -> list[TranslationJob]:
+        """Point-in-time copies for the UI (jobs mutate on the worker)."""
+        with self._translation_lock:
+            return [replace(job) for job in self.translation_jobs]
+
+    def _ensure_translation_worker(self) -> None:
+        if self._translation_worker is not None and self._translation_worker.is_alive():
+            return
+        self._translation_worker = threading.Thread(
+            target=self._translation_loop, name="scripto-translate-q", daemon=True
+        )
+        self._translation_worker.start()
+
+    def _translation_loop(self) -> None:
+        while True:
+            job = self._translation_q.get()
+            job.status = "running"
+
+            def progress(done: int, total: int, job: TranslationJob = job) -> None:
+                job.done, job.total = done, total
+
+            try:
+                produced = self._run_translation(
+                    srt_path=job.srt_path, source=job.source,
+                    target=job.target, progress=progress,
+                )
+                if produced:
+                    job.status = "done"
+                else:
+                    job.status = "failed"
+                    job.error = "no output"
+            except Exception as exc:  # surfaced per-job in the UI
+                job.status = "failed"
+                job.error = str(exc)
 
     def history_clean_missing(self) -> int:
         stale = {e.id for e, exists in self.history_rows() if not exists}

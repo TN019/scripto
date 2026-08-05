@@ -209,3 +209,25 @@ def test_history_viewer_edits_the_file_in_place(tmp_path, qapp):
     assert "corrected line" in saved
     assert "corrected line" in dialog.body.toPlainText()  # re-rendered
     assert not dialog.editor.isVisibleTo(dialog)
+
+
+def test_history_page_shows_translation_queue_status(tmp_path, qapp):
+    from scripto.gui.viewmodel import TranslationJob
+
+    window = make_window(tmp_path, qapp)
+    src = _seed_history(tmp_path, window.vm, "talk")
+    page = window.history_page
+    page.refresh()
+
+    job = TranslationJob(source=src, name="talk.mp4", srt_path="x",
+                         target="zh", status="running", done=21, total=40)
+    window.vm.translation_jobs.append(job)
+    page.tick_translations()
+    assert page.tq_strip.isVisibleTo(page)      # survives any dialog
+    assert "52%" in page.tq_label.text()
+    assert page._badges[src].isVisibleTo(page)  # per-card badge
+
+    job.status = "done"
+    page.tick_translations()
+    assert page._seen_terminal == 1             # toast fired exactly once
+    assert not page.tq_strip.isVisibleTo(page)

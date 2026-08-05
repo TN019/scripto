@@ -259,6 +259,8 @@ class MainWindow(QMainWindow):
             self._last_log_len = len(result.log_lines)
             self.run_page.refresh_log(result.log_lines)
 
+        self.history_page.tick_translations()
+
     # ------------------------------------------------------------------ #
     # Lifecycle
     # ------------------------------------------------------------------ #
