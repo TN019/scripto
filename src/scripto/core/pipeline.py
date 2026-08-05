@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from . import cleanup
 from ..engines.base import TranscribeEngine
 from ..engines.models import WhisperModelSpec
 from ..media import access, ffmpeg
@@ -252,6 +253,7 @@ class Pipeline:
                     self._engine.load(self._s.model)
                     loaded = True
                 result = self._transcribe(wav, job, stop)
+                result.segments, _ = cleanup.clean_segments(result.segments)
                 job.language = result.language or self._s.language
                 target = out.output_path(
                     job.source, language=job.language, fmt=self._s.fmt,

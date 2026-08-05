@@ -64,7 +64,13 @@ class MlxWhisperEngine(TranscribeEngine):
 
         import mlx_whisper
 
-        kwargs: dict = {"path_or_hf_repo": self._repo, "verbose": None}
+        kwargs: dict = {
+            "path_or_hf_repo": self._repo,
+            "verbose": None,
+            # A derailed 30s window must not infect the next one — this is
+            # how "9, 9, 9…" loops spread through silence-heavy recordings.
+            "condition_on_previous_text": False,
+        }
         if language:
             kwargs["language"] = language
         try:
