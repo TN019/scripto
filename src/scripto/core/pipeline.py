@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import queue
 import threading
@@ -25,6 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from . import cleanup
 from ..engines.base import TranscribeEngine
 from ..engines.models import WhisperModelSpec
 from ..media import access, ffmpeg
@@ -252,6 +254,8 @@ class Pipeline:
                     self._engine.load(self._s.model)
                     loaded = True
                 result = self._transcribe(wav, job, stop)
+                cleaned, _ = cleanup.clean_segments(result.segments)
+                result = dataclasses.replace(result, segments=cleaned)
                 job.language = result.language or self._s.language
                 target = out.output_path(
                     job.source, language=job.language, fmt=self._s.fmt,

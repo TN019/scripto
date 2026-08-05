@@ -72,7 +72,15 @@ class FasterWhisperEngine(TranscribeEngine):
         if stop_check is not None and stop_check():
             raise OperationStopped()
 
-        segment_iter, info = self._model.transcribe(str(audio_path), language=language)
+        # vad_filter skips non-speech (where hallucination loops are born);
+        # not conditioning on previous text stops a derailed 30s window from
+        # infecting the next one. Both also make silence-heavy files faster.
+        segment_iter, info = self._model.transcribe(
+            str(audio_path),
+            language=language,
+            vad_filter=True,
+            condition_on_previous_text=False,
+        )
         segments: list[Segment] = []
         total = float(getattr(info, "duration", 0.0) or 0.0)
         for seg in segment_iter:
