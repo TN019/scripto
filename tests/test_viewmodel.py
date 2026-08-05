@@ -256,3 +256,55 @@ def test_first_run_detection(tmp_path):
 
 def test_gui_module_imports():
     import scripto.gui_qt.main_window  # noqa: F401  (catches Qt API drift at import time)
+
+
+def test_translation_queue_processes_records_and_dedupes(tmp_path, monkeypatch):
+    vm = make_vm(tmp_path)
+    en_srt = tmp_path / "talk.en.srt"
+    en_srt.write_text("1\n00:00:00,000 --> 00:00:01,000\nhi\n", encoding="utf-8")
+    vm.history.append(HistoryEntry(
+        source=str(tmp_path / "talk.mp4"),
+        outputs=[{"lang": "en", "format": "srt", "path": str(en_srt)}],
+        model="tiny", engine="mlx", status="done",
+    ))
+    gate = threading.Event()
+
+    class FakeStage:
+        label = "ollama/fake"
+
+        def __init__(self, _client, **kwargs):
+            self.kwargs = kwargs
+
+        def translate(self, srt_path, source, stop_check=None, progress=None):
+            gate.wait(timeout=5)
+            if progress is not None:
+                progress(40, 40)
+            out = source.with_name(f"{source.stem}.{self.kwargs['target']}.srt")
+            out.write_text("1\n00:00:00,000 --> 00:00:01,000\nx\n", encoding="utf-8")
+            return [out]
+
+        def release(self):
+            pass
+
+    import scripto.gui.viewmodel as vmod
+
+    monkeypatch.setattr(vmod, "OllamaTranslateStage", FakeStage)
+    group = vm.history_groups()[0]
+    assert vm.queue_translation(group, "zh")
+    assert not vm.queue_translation(group, "zh")   # duplicate while queued
+    assert vm.queue_translation(group, "ja")       # second job queues fine
+    gate.set()
+
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        jobs = vm.translation_snapshot()
+        if len(jobs) == 2 and all(j.status in ("done", "failed") for j in jobs):
+            break
+        time.sleep(0.02)
+    jobs = vm.translation_snapshot()
+    assert [j.status for j in jobs] == ["done", "done"]
+    assert (jobs[0].done, jobs[0].total) == (40, 40)  # progress reached the job
+
+    regrouped = vm.history_groups()[0]
+    assert {"en", "zh", "ja"} <= set(regrouped.existing)
+    assert not vm.queue_translation(regrouped, "zh")  # target already exists

@@ -12,13 +12,17 @@ from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPlainTextEdit,
+    QProgressBar,
     QPushButton,
     QScrollArea,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
+
+from ..core.languages import known_languages
 
 _MS_RE = re.compile(r"[,.]\d{3}")
 
@@ -45,12 +49,41 @@ class HistoryPage(QWidget):
         self.delete_selected_btn.clicked.connect(self._delete_selected)
         self.delete_selected_btn.hide()
 
+        self.translate_selected_btn = QPushButton()
+        self.translate_selected_btn.setProperty("variant", "primary")
+        translate_menu = QMenu(self.translate_selected_btn)
+        for spec in known_languages():
+            translate_menu.addAction(
+                self.window_ref.lang_label(spec.code),
+                lambda code=spec.code: self._translate_selected(code),
+            )
+        self.translate_selected_btn.setMenu(translate_menu)
+        self.translate_selected_btn.hide()
+
         top = QHBoxLayout()
         top.setSpacing(8)
         top.addWidget(refresh_btn)
         top.addWidget(clean_btn)
+        top.addWidget(self.translate_selected_btn)
         top.addWidget(self.delete_selected_btn)
         top.addStretch(1)
+
+        # Translation-queue strip: visible whenever jobs are queued/running,
+        # regardless of any dialog being open.
+        self.tq_label = subtext()
+        self.tq_bar = QProgressBar()
+        self.tq_bar.setRange(0, 1000)
+        self.tq_bar.setTextVisible(False)
+        self.tq_bar.setFixedWidth(160)
+        self.tq_strip = QWidget()
+        strip = QHBoxLayout(self.tq_strip)
+        strip.setContentsMargins(0, 0, 0, 0)
+        strip.setSpacing(8)
+        strip.addWidget(self.tq_bar)
+        strip.addWidget(self.tq_label, 1)
+        self.tq_strip.hide()
+        self._badges: dict[str, QLabel] = {}
+        self._seen_terminal = 0
 
         self.list_box = QVBoxLayout()
         self.list_box.setSpacing(6)
@@ -65,6 +98,7 @@ class HistoryPage(QWidget):
         root.setContentsMargins(16, 12, 16, 12)
         root.setSpacing(10)
         root.addLayout(top)
+        root.addWidget(self.tq_strip)
         root.addWidget(scroll, 1)
 
     # ------------------------------------------------------------------ #
@@ -73,6 +107,7 @@ class HistoryPage(QWidget):
         t = self.t
         clear_layout(self.list_box, keep_tail=1)
         self._selected.clear()
+        self._badges.clear()
         self._sync_delete_button()
 
         groups = self.vm.history_groups()
@@ -107,6 +142,14 @@ class HistoryPage(QWidget):
             text_col.addWidget(name)
             text_col.addWidget(sub)
             row.addLayout(text_col, 1)
+
+            badge = subtext()
+            badge.setStyleSheet(
+                f"color: {self.window_ref.palette_tokens.accent}; font-size: 11px;"
+            )
+            badge.hide()
+            row.addWidget(badge)
+            self._badges[group.source] = badge
 
             if group.deleted:
                 deleted = subtext(t("gui.history_deleted"))
@@ -156,10 +199,83 @@ class HistoryPage(QWidget):
     def _sync_delete_button(self) -> None:
         count = len(self._selected)
         self.delete_selected_btn.setVisible(count > 0)
+        self.translate_selected_btn.setVisible(count > 0)
         if count:
             self.delete_selected_btn.setText(
                 self.t("gui.history_delete_selected", n=count)
             )
+            self.translate_selected_btn.setText(
+                self.t("gui.translate_selected", n=count)
+            )
+
+    def _translate_selected(self, target: str) -> None:
+        queued = 0
+        for group in self.vm.history_groups():
+            if group.source in self._selected:
+                if self.vm.queue_translation(group, target):
+                    queued += 1
+        if queued:
+            self.window_ref.toast(self.t("gui.tq_enqueued"))
+        else:
+            self.window_ref.toast(self.t("gui.tq_nothing"), ok=False)
+
+    # ------------------------------------------------------------------ #
+    # Queue status (driven by MainWindow's 4 Hz ticker)
+    # ------------------------------------------------------------------ #
+
+    def tick_translations(self) -> None:
+        jobs = self.vm.translation_snapshot()
+        if not jobs and not self.tq_strip.isVisible():
+            return
+
+        running = [j for j in jobs if j.status == "running"]
+        queued = [j for j in jobs if j.status == "queued"]
+        if running or queued:
+            active = running[0] if running else queued[0]
+            text = self.t(
+                "gui.tq_running", name=active.name,
+                lang=self.window_ref.lang_label(active.target),
+                pct=int(active.fraction * 100),
+            )
+            if queued:
+                text += self.t("gui.tq_queued_n", n=len(queued))
+            self.tq_label.setText(text)
+            self.tq_bar.setValue(int(active.fraction * 1000))
+            self.tq_strip.show()
+        else:
+            self.tq_strip.hide()
+
+        by_source: dict[str, str] = {}
+        for job in running + queued:
+            if job.source not in by_source:
+                key = ("gui.tq_badge_running" if job.status == "running"
+                       else "gui.tq_badge_queued")
+                by_source[job.source] = self.t(
+                    key, lang=self.window_ref.lang_label(job.target),
+                    pct=int(job.fraction * 100),
+                )
+        for source, badge in self._badges.items():
+            text = by_source.get(source, "")
+            badge.setText(text)
+            badge.setVisible(bool(text))
+
+        # Newly finished jobs: toast once each, refresh the list once.
+        terminal = [j for j in jobs if j.status in ("done", "failed")]
+        if len(terminal) > self._seen_terminal:
+            for job in terminal[self._seen_terminal:]:
+                lang = self.window_ref.lang_label(job.target)
+                if job.status == "done":
+                    self.window_ref.toast(
+                        self.t("gui.tq_done", name=job.name, lang=lang)
+                    )
+                else:
+                    self.window_ref.toast(
+                        self.t("gui.tq_failed", name=job.name, lang=lang,
+                               reason=job.error),
+                        ok=False,
+                    )
+            self._seen_terminal = len(terminal)
+            self.refresh()
 
     def _delete_selected(self) -> None:
         self._delete_sources(set(self._selected))
@@ -376,42 +492,9 @@ class _ViewerDialog(QDialog):
         self.body.setHtml("".join(parts) or escape(content))
 
     def _translate(self, lang: str) -> None:
-        if self.busy:
-            return
-        self.busy = True
-        self.status_label.setText(
-            self.t("gui.history_translating",
-                   lang=self.page.window_ref.lang_label(lang))
-        )
-        self._rebuild_buttons()
-        window = self.page.window_ref
-
-        def job() -> None:
-            status_text = ""
-            try:
-                produced = self.vm.translate_history(self.group, lang)
-                if produced:
-                    status_text = self.t("gui.history_translate_done")
-                    self.group.existing[lang] = str(produced[0])
-                    if lang in self.group.missing:
-                        self.group.missing.remove(lang)
-                    self.lang = lang
-                else:
-                    status_text = self.t("gui.models_failed", reason="no output")
-            except Exception as exc:
-                status_text = self.t("gui.models_failed", reason=exc)
-
-            def apply() -> None:
-                self.busy = False
-                self.status_label.setText(status_text)
-                if self.lang in self.group.existing:
-                    path = self.group.existing[self.lang]
-                    try:
-                        self._render(self.vm.read_preview(path), path)
-                    except Exception:
-                        pass
-                self._rebuild_buttons()
-
-            window.run_in_main(apply)
-
-        window.run_thread(job)
+        # Enqueued, not run here: the job survives closing this dialog, and
+        # its progress lives on the history page (strip + card badge).
+        if self.vm.queue_translation(self.group, lang):
+            self.status_label.setText(self.t("gui.tq_enqueued"))
+        else:
+            self.status_label.setText(self.t("gui.tq_nothing"))
