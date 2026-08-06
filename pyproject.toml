@@ -1,6 +1,6 @@
 [project]
 name = "scripto"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local, free batch audio/video transcription and subtitle translation for macOS and Windows."
 readme = "README.md"
 license = "MIT"
