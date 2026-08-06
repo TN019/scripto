@@ -37,6 +37,9 @@ DEFAULTS: dict[str, Any] = {
     "translate_batch_max_chars": 3000,
     # Pipeline
     "memory_mode": "balanced",       # balanced | low
+    # iCloud files are downloaded on demand; True puts the ones we downloaded
+    # back to cloud-only afterwards, leaving the folder as we found it.
+    "icloud_evict": True,
     "segment_threshold_sec": 3600,   # chunk files longer than this (0 = off)
     "segment_chunk_sec": 1800,
     # Output (R4): None = write next to the source file

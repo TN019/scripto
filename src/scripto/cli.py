@@ -163,6 +163,7 @@ def run_batch(args: argparse.Namespace, config_service: ConfigService, i18n: I18
         export_dir=export_dir,
         suffix_map=dict(config["lang_suffixes"]),
         memory_mode=config["memory_mode"],
+        icloud_evict=config["icloud_evict"],
         engine_label=engine_name,
         segment_threshold_sec=float(config["segment_threshold_sec"]),
         segment_chunk_sec=float(config["segment_chunk_sec"]),

@@ -231,3 +231,34 @@ def test_history_page_shows_translation_queue_status(tmp_path, qapp):
     page.tick_translations()
     assert page._seen_terminal == 1             # toast fired exactly once
     assert not page.tq_strip.isVisibleTo(page)
+
+
+def test_failure_text_is_localized_when_core_supplied_a_key(tmp_path, qapp):
+    """Core raises English + an i18n key; the row must show the user's language."""
+    from scripto.gui.viewmodel import FileRow
+
+    window = make_window(tmp_path, qapp)
+    window.vm.update_settings(language="zh")
+    page = window.run_page
+
+    row = FileRow(
+        id=1,
+        path=tmp_path / "clip.mp4",
+        status="failed",
+        error="clip.mp4 is still downloading from iCloud after 600s.",
+        error_key="errors.icloud_timeout",
+        error_params=(("name", "clip.mp4"), ("seconds", "600")),
+    )
+    text = page.error_text(row)
+    assert "iCloud" in text and "600" in text
+    assert "still downloading" not in text      # not the English fallback
+
+    # No key (a raw ffmpeg message): the English text shows through unchanged.
+    plain = FileRow(id=2, path=tmp_path / "clip.mp4", status="failed",
+                    error="extract: ffmpeg exploded")
+    assert page.error_text(plain) == "extract: ffmpeg exploded"
+
+    # A params/template mismatch must not blank the row.
+    broken = FileRow(id=3, path=tmp_path / "clip.mp4", status="failed",
+                     error="fallback text", error_key="errors.icloud_timeout")
+    assert page.error_text(broken) == "fallback text"

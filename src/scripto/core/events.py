@@ -38,6 +38,12 @@ class StatusEvent(Event):
     subject: str
     status: str
     detail: str = ""
+    # The same message as an i18n key and its params, when the failure came
+    # from a ScriptoError. UI layers render this and fall back to `detail`,
+    # which is always English — core never imports a catalog. Params are a
+    # tuple of pairs so the event stays frozen and hashable.
+    detail_key: str = ""
+    detail_params: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)

@@ -9,6 +9,7 @@ from pathlib import Path
 
 class JobStatus(StrEnum):
     PENDING = "pending"
+    DOWNLOADING = "downloading"  # pulling an iCloud file onto local disk
     EXTRACTING = "extracting"
     TRANSCRIBING = "transcribing"
     TRANSLATING = "translating"
@@ -23,7 +24,9 @@ class Job:
     id: int
     source: Path
     status: JobStatus = JobStatus.PENDING
-    error: str = ""
+    error: str = ""                  # always English; see error_key
+    error_key: str = ""              # i18n key when the failure carried one
+    error_params: tuple[tuple[str, str], ...] = ()
     language: str | None = None      # detected (or forced) audio language
     outputs: list[Path] = field(default_factory=list)
 

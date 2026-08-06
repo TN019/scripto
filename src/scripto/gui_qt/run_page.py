@@ -38,6 +38,7 @@ SCAN_DEBOUNCE_MS = 600
 
 STATUS_ROLES = {
     JobStatus.PENDING.value: "subtext",
+    JobStatus.DOWNLOADING.value: "running",
     JobStatus.EXTRACTING.value: "running",
     JobStatus.TRANSCRIBING.value: "running",
     JobStatus.TRANSLATING.value: "running",
@@ -48,6 +49,7 @@ STATUS_ROLES = {
 }
 
 ACTIVE_STATUSES = (
+    JobStatus.DOWNLOADING.value,
     JobStatus.EXTRACTING.value,
     JobStatus.TRANSCRIBING.value,
     JobStatus.TRANSLATING.value,
@@ -141,7 +143,7 @@ class FileRowWidget(QFrame):
 
         failed = row.status == JobStatus.FAILED.value
         done = row.status in (JobStatus.DONE.value, JobStatus.SKIPPED.value)
-        self.error_label.setText(row.error)
+        self.error_label.setText(page.error_text(row))
         self.error_label.setStyleSheet(f"color: {palette.error}; font-size: 11px;")
         self.error_label.setVisible(failed and bool(row.error))
         self.retry_btn.setVisible(failed)
@@ -452,6 +454,26 @@ class RunPage(QWidget):
             widget = FileRowWidget(self, self.vm.rows[row_id])
             self.row_widgets[row_id] = widget
             self.rows_box.insertWidget(self.rows_box.count() - 1, widget)
+
+    def error_text(self, row) -> str:
+        """A failure in the user's language when core gave us a key for it.
+
+        Core raises English messages plus an i18n key (R7); ``row.error`` is
+        the English one and only shows through for failures that carry no
+        key, such as a raw ffmpeg or engine message.
+        """
+        if not row.error_key:
+            return row.error
+        try:
+            text = self.t(row.error_key, **dict(row.error_params))
+        except (KeyError, IndexError, ValueError):
+            return row.error  # a template/params mismatch must not blank the row
+        # `t` hands back the raw template when given no params, so a leftover
+        # placeholder means the key and the params disagree — show the
+        # English message rather than "{name} 从 iCloud 下载…".
+        if "{" in text and row.error:
+            return row.error
+        return text
 
     def retry_row(self, row_id: int) -> None:
         if self.vm.start_batch(only_ids=[row_id]):
