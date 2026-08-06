@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -141,6 +142,52 @@ def test_skip_existing_without_overwrite(tmp_path, fake_extract):
     assert stats.skipped == 1 and stats.done == 1
     assert jobs[0].status == JobStatus.SKIPPED
     assert (files[0].parent / (files[0].stem + ".en.srt")).read_text(encoding="utf-8") == "old"
+
+
+def test_skipped_file_lands_in_history_with_all_its_languages(tmp_path, fake_extract):
+    """A video that arrives already subtitled is a history row, not a no-op."""
+    (video,) = make_media(tmp_path, 1)
+    (tmp_path / f"{video.stem}.srt").write_text("en", encoding="utf-8")
+    (tmp_path / f"{video.stem}.zh.srt").write_text("zh", encoding="utf-8")
+    (tmp_path / f"{video.stem}.ja.srt").write_text("ja", encoding="utf-8")
+
+    pipe, _bus = make_pipeline(tmp_path)
+    jobs, stats = pipe.run([video], threading.Event())
+    assert stats.skipped == 1 and jobs[0].status == JobStatus.SKIPPED
+
+    entries = HistoryStore(tmp_path / "history.json").entries()
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry.status == "skipped"
+    assert {o["lang"]: Path(o["path"]).name for o in entry.outputs} == {
+        "en": f"{video.stem}.srt",       # suffix-less file read as English
+        "zh": f"{video.stem}.zh.srt",
+        "ja": f"{video.stem}.ja.srt",
+    }
+
+
+def test_transcribed_file_reports_subtitles_it_arrived_with(tmp_path, fake_extract):
+    (video,) = make_media(tmp_path, 1)
+    (tmp_path / f"{video.stem}.zh.srt").write_text("zh", encoding="utf-8")
+
+    # Forced English: auto-detect would treat the Chinese file as "done".
+    pipe, _bus = make_pipeline(tmp_path, language="en")
+    _jobs, stats = pipe.run([video], threading.Event())
+    assert stats.done == 1
+
+    (entry,) = HistoryStore(tmp_path / "history.json").entries()
+    langs = {o["lang"] for o in entry.outputs}
+    assert langs == {"en", "zh"}          # the one produced plus the one found
+
+
+def test_failed_job_does_not_claim_unrelated_subtitles(tmp_path, fake_extract):
+    (video,) = make_media(tmp_path, 1)
+    (tmp_path / f"{video.stem}.zh.srt").write_text("zh", encoding="utf-8")
+    pipe, _bus = make_pipeline(tmp_path, StubEngine(fail_on={video.stem}), language="en")
+    pipe.run([video], threading.Event())
+
+    (entry,) = HistoryStore(tmp_path / "history.json").entries()
+    assert entry.status == "failed" and entry.outputs == []
 
 
 def test_overwrite_regenerates(tmp_path, fake_extract):

@@ -54,6 +54,52 @@ def test_existing_transcript_auto_checks_known_suffixes(tmp_path):
     assert out.existing_transcript(src, fmt="srt", language=None) is not None
 
 
+def test_language_from_suffix_reads_names_the_way_we_write_them():
+    assert out.language_from_suffix(".zh") == "zh"
+    assert out.language_from_suffix(".cn") == "zh"      # alias spelling
+    assert out.language_from_suffix(".ENG") == "en"     # case-insensitive
+    assert out.language_from_suffix("") == "en"         # no suffix: English
+    assert out.language_from_suffix(".fr") == "fr"      # unregistered, well-formed
+    assert out.language_from_suffix(".pt-br") == "pt-br"
+    assert out.language_from_suffix(".part2") is None   # a filename, not a language
+    assert out.language_from_suffix(".final") is None
+
+
+def test_sibling_transcripts_maps_every_language_beside_the_video(tmp_path):
+    src = tmp_path / "lecture.mp4"
+    src.write_bytes(b"x")
+    for name in ("lecture.srt", "lecture.zh.srt", "lecture.ja.srt",
+                 "lecture.part2.srt", "lecture-draft.srt", "other.zh.srt"):
+        (tmp_path / name).write_text("x", encoding="utf-8")
+
+    found = out.sibling_transcripts(src, fmt="srt")
+    assert {k: v.name for k, v in found.items()} == {
+        "en": "lecture.srt",       # no suffix counts as English
+        "zh": "lecture.zh.srt",
+        "ja": "lecture.ja.srt",
+    }
+    # Registry order, so callers get a stable first choice.
+    assert list(found) == ["en", "zh", "ja"]
+
+
+def test_sibling_transcripts_ignores_other_formats_and_missing_dirs(tmp_path):
+    src = tmp_path / "lecture.mp4"
+    (tmp_path / "lecture.zh.srt").write_text("x", encoding="utf-8")
+    (tmp_path / "lecture.en.txt").write_text("x", encoding="utf-8")
+    assert list(out.sibling_transcripts(src, fmt="srt")) == ["zh"]
+    assert list(out.sibling_transcripts(src, fmt="txt")) == ["en"]
+    assert out.sibling_transcripts(tmp_path / "gone" / "x.mp4", fmt="srt") == {}
+
+
+def test_existing_transcript_accepts_a_suffixless_subtitle(tmp_path):
+    src = tmp_path / "lecture.mp4"
+    (tmp_path / "lecture.srt").write_text("x", encoding="utf-8")
+    # The shape subtitles arrive in from elsewhere: no language in the name.
+    assert out.existing_transcript(src, fmt="srt", language=None) is not None
+    assert out.existing_transcript(src, fmt="srt", language="en") is not None
+    assert out.existing_transcript(src, fmt="srt", language="zh") is None
+
+
 def test_srt_writer_structure(tmp_path):
     target = tmp_path / "o.srt"
     out.write_result(_result(), target, "srt")

@@ -238,6 +238,10 @@ class Pipeline:
                 job.outputs.append(existing)
                 stats.skipped += 1
                 self._emit_status(job)
+                # Skipping still belongs in history: the file has subtitles,
+                # and the user wants to reach them (view, play, translate)
+                # from there like any other result.
+                self._record(job)
                 self._queue_translation(job, existing, translate_q, deferred, translate_now, stop)
                 continue
 
@@ -431,19 +435,45 @@ class Pipeline:
         except Exception:
             logger.exception("could not write translation history entry")
 
+    def _output_rows(self, job: Job) -> list[dict[str, str]]:
+        """Every transcript this source has now, with its language named.
+
+        The job's own products first — their language is the detected one,
+        which beats guessing from a filename — then any same-stem siblings
+        already on disk: subtitles that shipped with the video, or that an
+        earlier run produced in another language. A source appears in
+        history with all of its languages, not just the one this run touched.
+        """
+        rows: dict[str, dict[str, str]] = {}
+
+        def row(path: Path, lang: str) -> dict[str, str]:
+            return {
+                "lang": lang,
+                "format": path.suffix.lstrip("."),
+                "path": str(path),
+            }
+
+        for path in job.outputs:
+            rows[str(path)] = row(path, job.language or "")
+        if job.status in (JobStatus.DONE, JobStatus.SKIPPED):
+            siblings = out.sibling_transcripts(
+                job.source, fmt=self._s.fmt,
+                suffix_map=self._s.suffix_map, export_dir=self._s.export_dir,
+            )
+            for language, path in siblings.items():
+                known = rows.get(str(path))
+                if known is None:
+                    rows[str(path)] = row(path, language)
+                elif not known["lang"]:
+                    known["lang"] = language  # skipped job: the name is all we have
+        return list(rows.values())
+
     def _record(self, job: Job, duration: float = 0.0) -> None:
         try:
             self._history.append(
                 HistoryEntry(
                     source=str(job.source),
-                    outputs=[
-                        {
-                            "lang": job.language or "",
-                            "format": path.suffix.lstrip("."),
-                            "path": str(path),
-                        }
-                        for path in job.outputs
-                    ],
+                    outputs=self._output_rows(job),
                     model=self._s.model.key,
                     engine=self._s.engine_label,
                     status=job.status.value if job.status != JobStatus.PENDING else "failed",
