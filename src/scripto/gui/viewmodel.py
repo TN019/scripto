@@ -34,7 +34,9 @@ class FileRow:
     id: int
     path: Path
     status: str = JobStatus.PENDING.value
-    error: str = ""
+    error: str = ""                  # English fallback
+    error_key: str = ""              # preferred: rendered through i18n
+    error_params: tuple[tuple[str, str], ...] = ()
     progress: float = 0.0          # 0..1 within the active stage
     stage: str = ""                # "transcribe" | "translate" | ""
 
@@ -233,6 +235,7 @@ class GuiViewModel:
             export_dir=Path(config["export_dir"]).expanduser() if config["export_dir"] else None,
             suffix_map=dict(config["lang_suffixes"]),
             memory_mode=config["memory_mode"],
+            icloud_evict=config["icloud_evict"],
             engine_label=engine_name,
             segment_threshold_sec=float(config.get("segment_threshold_sec", 3600)),
             segment_chunk_sec=float(config.get("segment_chunk_sec", 1800)),
@@ -260,6 +263,8 @@ class GuiViewModel:
                 self._track_eta(row, event.status)
                 row.status = event.status
                 row.error = event.detail
+                row.error_key = event.detail_key
+                row.error_params = event.detail_params
                 if event.status in (
                     JobStatus.DONE.value, JobStatus.SKIPPED.value, JobStatus.FAILED.value
                 ):

@@ -190,6 +190,83 @@ def test_failed_job_does_not_claim_unrelated_subtitles(tmp_path, fake_extract):
     assert entry.status == "failed" and entry.outputs == []
 
 
+@pytest.fixture
+def fake_icloud(monkeypatch):
+    """A source that is in the cloud until something materializes it."""
+    state = {"in_cloud": set(), "downloaded": [], "evicted": []}
+
+    def needs_download(src):
+        return src in state["in_cloud"]
+
+    def materialize(src, *, stop_check=None, on_progress=None, timeout_sec=None):
+        if src not in state["in_cloud"]:
+            return
+        state["downloaded"].append(src)
+        state["in_cloud"].discard(src)
+        if on_progress is not None:
+            on_progress(1000, 1000)
+
+    def evict(src):
+        state["evicted"].append(src)
+        state["in_cloud"].add(src)
+        return True
+
+    monkeypatch.setattr(pl.access, "needs_download", needs_download)
+    monkeypatch.setattr(pl.access, "materialize", materialize)
+    monkeypatch.setattr(pl.access, "evict", evict)
+    return state
+
+
+def test_cloud_file_is_downloaded_then_returned_to_the_cloud(
+    tmp_path, fake_extract, fake_icloud
+):
+    (video,) = make_media(tmp_path, 1)
+    fake_icloud["in_cloud"].add(video)
+
+    pipe, bus = make_pipeline(tmp_path)
+    seen: list[str] = []
+    bus.subscribe(lambda e: seen.append(getattr(e, "status", "")))
+    jobs, stats = pipe.run([video], threading.Event())
+
+    assert stats.done == 1 and jobs[0].status == JobStatus.DONE
+    assert fake_icloud["downloaded"] == [video]   # pulled down to work on
+    assert fake_icloud["evicted"] == [video]      # and put back afterwards
+    assert JobStatus.DOWNLOADING.value in seen    # the UI can show it happening
+
+
+def test_local_file_is_never_evicted(tmp_path, fake_extract, fake_icloud):
+    """Only files this run downloaded — never ones the user already had."""
+    (video,) = make_media(tmp_path, 1)
+    pipe, _bus = make_pipeline(tmp_path)
+    pipe.run([video], threading.Event())
+    assert fake_icloud["downloaded"] == [] and fake_icloud["evicted"] == []
+
+
+def test_cloud_file_stays_local_when_eviction_is_off(
+    tmp_path, fake_extract, fake_icloud
+):
+    (video,) = make_media(tmp_path, 1)
+    fake_icloud["in_cloud"].add(video)
+    pipe, _bus = make_pipeline(tmp_path)
+    pipe._s.icloud_evict = False
+    pipe.run([video], threading.Event())
+    assert fake_icloud["downloaded"] == [video]
+    assert fake_icloud["evicted"] == []
+
+
+def test_cloud_file_is_returned_even_when_the_job_fails(
+    tmp_path, fake_extract, fake_icloud
+):
+    (video,) = make_media(tmp_path, 1)
+    fake_icloud["in_cloud"].add(video)
+    fake_extract["fail_on"] = {video.stem}
+
+    pipe, _bus = make_pipeline(tmp_path)
+    _jobs, stats = pipe.run([video], threading.Event())
+    assert stats.failed == 1
+    assert fake_icloud["evicted"] == [video]      # no downloads left behind
+
+
 def test_overwrite_regenerates(tmp_path, fake_extract):
     files = make_media(tmp_path, 1)
     target = files[0].parent / (files[0].stem + ".en.srt")

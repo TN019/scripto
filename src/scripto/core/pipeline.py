@@ -66,6 +66,9 @@ class PipelineSettings:
     export_dir: Path | None = None
     suffix_map: dict[str, str] = field(default_factory=lambda: dict(out.DEFAULT_SUFFIXES))
     memory_mode: str = "balanced"           # balanced | low
+    # Put an iCloud file back to cloud-only once its audio is extracted —
+    # only ever files this run downloaded, never ones already on disk.
+    icloud_evict: bool = True
     cache_dir: Path | None = None
     engine_label: str = ""                  # for history records
     # Very-long-file segmentation: flatten the per-file memory peak by
@@ -175,9 +178,26 @@ class Pipeline:
                     self._put(extract_q, (job, None, existing), stop)
                     continue
 
-                job.status = JobStatus.EXTRACTING
-                self._emit_status(job)
+                # An iCloud file that isn't downloaded yet is not a failure:
+                # pull it down, use it, and put it back where we found it so
+                # a batch of lecture recordings doesn't fill the disk.
+                in_cloud = access.needs_download(job.source)
+                borrowed = in_cloud and self._s.icloud_evict
                 try:
+                    if in_cloud:
+                        job.status = JobStatus.DOWNLOADING
+                        self._emit_status(job)
+                        access.materialize(
+                            job.source,
+                            stop_check=stop.is_set,
+                            on_progress=lambda done, total, j=job: self._bus.emit(
+                                ProgressEvent(
+                                    scope=f"download:{j.id}", done=done, total=total
+                                )
+                            ),
+                        )
+                    job.status = JobStatus.EXTRACTING
+                    self._emit_status(job)
                     access.check_readable(job.source)
                     wav = ffmpeg.extract_audio(
                         job.source,
@@ -188,9 +208,14 @@ class Pipeline:
                     job.status = JobStatus.PENDING
                     break
                 except Exception as exc:
-                    self._fail(job, f"extract: {exc}")
+                    self._fail(job, f"extract: {exc}", exc)
                     self._put(extract_q, (job, None, None), stop)
                     continue
+                finally:
+                    # Runs on every exit including break/continue: the audio
+                    # is in the cache by now, the source is dead weight.
+                    if borrowed:
+                        access.evict(job.source)
                 if not self._put(extract_q, (job, wav, None), stop):
                     wav.unlink(missing_ok=True)
                     break
@@ -275,7 +300,7 @@ class Pipeline:
             except OperationStopped:
                 job.status = JobStatus.PENDING
             except Exception as exc:
-                self._fail(job, str(exc))
+                self._fail(job, str(exc), exc)
                 stats.failed += 1
             finally:
                 if wav:
@@ -406,9 +431,12 @@ class Pipeline:
     # Helpers
     # ------------------------------------------------------------------ #
 
-    def _fail(self, job: Job, reason: str) -> None:
+    def _fail(self, job: Job, reason: str, exc: BaseException | None = None) -> None:
         job.status = JobStatus.FAILED
         job.error = reason
+        if isinstance(exc, ScriptoError) and exc.key:
+            job.error_key = exc.key
+            job.error_params = tuple((k, str(v)) for k, v in exc.params.items())
         self._emit_status(job)
         self._record(job)
         logger.warning("job failed: %s — %s", job.source, reason)
@@ -486,5 +514,11 @@ class Pipeline:
 
     def _emit_status(self, job: Job) -> None:
         self._bus.emit(
-            StatusEvent(subject=f"job:{job.id}", status=job.status.value, detail=job.error)
+            StatusEvent(
+                subject=f"job:{job.id}",
+                status=job.status.value,
+                detail=job.error,
+                detail_key=job.error_key,
+                detail_params=job.error_params,
+            )
         )

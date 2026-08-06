@@ -85,6 +85,10 @@ class SettingsPage(QWidget):
         overwrite = QCheckBox(t("gui.settings_overwrite"))
         overwrite.setChecked(bool(config["overwrite"]))
         overwrite.toggled.connect(lambda on: self._save("overwrite", bool(on)))
+        evict = QCheckBox(t("gui.settings_icloud_evict"))
+        evict.setToolTip(t("gui.settings_icloud_evict_hint"))
+        evict.setChecked(bool(config["icloud_evict"]))
+        evict.toggled.connect(lambda on: self._save("icloud_evict", bool(on)))
 
         export = QLineEdit(str(config.get("export_dir") or ""))
         export.setPlaceholderText(t("gui.settings_export"))
@@ -118,6 +122,7 @@ class SettingsPage(QWidget):
         form.addRow(t("gui.settings_ollama_model"), ollama)
         form.addRow("", recursive)
         form.addRow("", overwrite)
+        form.addRow("", evict)
         form.addRow(t("gui.settings_export"), export)
 
         content = QWidget()
