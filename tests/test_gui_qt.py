@@ -185,7 +185,8 @@ def test_history_delete_single_and_batch(tmp_path, qapp):
     page._toggle_selected(b, True)
     page._toggle_selected(c, True)
     assert page.delete_selected_btn.isVisibleTo(page)
-    page._delete_selected()  # batch
+    page._confirm_delete = lambda _n: True  # the batch path asks first
+    page._delete_selected()
     assert window.vm.history_groups() == []
 
 
@@ -262,3 +263,70 @@ def test_failure_text_is_localized_when_core_supplied_a_key(tmp_path, qapp):
     broken = FileRow(id=3, path=tmp_path / "clip.mp4", status="failed",
                      error="fallback text", error_key="errors.icloud_timeout")
     assert page.error_text(broken) == "fallback text"
+
+
+def test_history_select_all_toggles_every_card(tmp_path, qapp):
+    from PySide6.QtCore import Qt
+
+    window = make_window(tmp_path, qapp)
+    sources = [_seed_history(tmp_path, window.vm, s) for s in ("a", "b", "c")]
+    page = window.history_page
+    page.refresh()
+
+    assert page.select_all.isVisibleTo(page)
+    assert page.select_all.checkState() == Qt.CheckState.Unchecked
+    assert not page.delete_selected_btn.isVisibleTo(page)
+
+    page._toggle_all()                      # what a click on it does
+    assert page._selected == set(sources)
+    assert all(box.isChecked() for box in page._checkboxes.values())
+    assert page.select_all.checkState() == Qt.CheckState.Checked
+    assert "3" in page.delete_selected_btn.text()
+
+    page._toggle_all()                      # clicking again clears
+    assert page._selected == set()
+    assert page.select_all.checkState() == Qt.CheckState.Unchecked
+    assert not page.delete_selected_btn.isVisibleTo(page)
+
+    # One card on its own leaves the master box in between.
+    page._checkboxes[sources[0]].setChecked(True)
+    assert page.select_all.checkState() == Qt.CheckState.PartiallyChecked
+    # ...and select-all from a partial state selects the rest, not none.
+    page._toggle_all()
+    assert page._selected == set(sources)
+
+
+def test_history_select_all_hides_when_there_is_nothing_to_select(tmp_path, qapp):
+    window = make_window(tmp_path, qapp)
+    page = window.history_page
+    page.refresh()
+    assert not page.select_all.isVisibleTo(page)
+
+
+def test_bulk_history_delete_asks_first(tmp_path, qapp):
+    window = make_window(tmp_path, qapp)
+    sources = [_seed_history(tmp_path, window.vm, s) for s in ("a", "b", "c")]
+    page = window.history_page
+    page.refresh()
+
+    asked = []
+    page._confirm_delete = lambda n: asked.append(n) or False   # user cancels
+    page._toggle_all()
+    page._delete_selected()
+    assert asked == [3]
+    assert len(window.vm.history_groups()) == 3   # nothing was deleted
+
+    page._confirm_delete = lambda n: asked.append(n) or True    # user confirms
+    page._delete_selected()
+    assert asked == [3, 3]
+    assert window.vm.history_groups() == []
+
+    # A single row keeps the old one-click behaviour — no dialog.
+    _seed_history(tmp_path, window.vm, "d")
+    page.refresh()
+    page._confirm_delete = lambda n: asked.append(n) or False
+    page._delete_sources({sources[0]})
+    page._checkboxes and page._checkboxes[list(page._checkboxes)[0]].setChecked(True)
+    page._delete_selected()
+    assert asked == [3, 3]                       # never asked again
+    assert window.vm.history_groups() == []

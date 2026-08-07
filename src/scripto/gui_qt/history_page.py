@@ -7,12 +7,14 @@ import re
 from html import escape
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QHBoxLayout,
     QLabel,
     QMenu,
+    QMessageBox,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
@@ -40,6 +42,18 @@ class HistoryPage(QWidget):
     def _build(self) -> None:
         t = self.t
         self._selected: set[str] = set()
+        self._checkboxes: dict[str, QCheckBox] = {}
+        # Set while select-all drives every row, so the toolbar is rebuilt
+        # once at the end instead of once per card.
+        self._bulk_selecting = False
+
+        # `clicked` and not `toggled`: it fires only on a real click, so the
+        # programmatic state sync below can't loop back into here.
+        self.select_all = QCheckBox(t("gui.select_all"))
+        self.select_all.setTristate(True)
+        self.select_all.clicked.connect(self._toggle_all)
+        self.select_all.hide()
+
         refresh_btn = QPushButton(t("gui.history_refresh"))
         refresh_btn.clicked.connect(self.refresh)
         clean_btn = QPushButton(t("gui.history_clean"))
@@ -62,6 +76,7 @@ class HistoryPage(QWidget):
 
         top = QHBoxLayout()
         top.setSpacing(8)
+        top.addWidget(self.select_all)
         top.addWidget(refresh_btn)
         top.addWidget(clean_btn)
         top.addWidget(self.translate_selected_btn)
@@ -107,6 +122,7 @@ class HistoryPage(QWidget):
         t = self.t
         clear_layout(self.list_box, keep_tail=1)
         self._selected.clear()
+        self._checkboxes.clear()
         self._badges.clear()
         self._sync_delete_button()
 
@@ -127,6 +143,7 @@ class HistoryPage(QWidget):
             select.toggled.connect(
                 lambda on, s=group.source: self._toggle_selected(s, on)
             )
+            self._checkboxes[group.source] = select
             row.addWidget(select)
 
             name = ElidedLabel(group.name)
@@ -182,6 +199,10 @@ class HistoryPage(QWidget):
 
             self.list_box.insertWidget(self.list_box.count() - 1, frame)
 
+        # Again now that the cards exist: the sync above ran against an empty
+        # page and left select-all hidden.
+        self._sync_delete_button()
+
     def _clean(self) -> None:
         removed = self.vm.history_clean_missing()
         self.window_ref.toast(self.t("gui.history_cleaned", n=removed))
@@ -194,10 +215,23 @@ class HistoryPage(QWidget):
             self._selected.add(source)
         else:
             self._selected.discard(source)
+        if not self._bulk_selecting:
+            self._sync_delete_button()
+
+    def _toggle_all(self) -> None:
+        """Select every row, or clear the selection once everything is on."""
+        target = len(self._selected) < len(self._checkboxes)
+        self._bulk_selecting = True
+        try:
+            for box in self._checkboxes.values():
+                box.setChecked(target)
+        finally:
+            self._bulk_selecting = False
         self._sync_delete_button()
 
     def _sync_delete_button(self) -> None:
         count = len(self._selected)
+        total = len(self._checkboxes)
         self.delete_selected_btn.setVisible(count > 0)
         self.translate_selected_btn.setVisible(count > 0)
         if count:
@@ -207,6 +241,18 @@ class HistoryPage(QWidget):
             self.translate_selected_btn.setText(
                 self.t("gui.translate_selected", n=count)
             )
+
+        self.select_all.setVisible(total > 0)
+        state = Qt.CheckState.Unchecked
+        if count and count == total:
+            state = Qt.CheckState.Checked
+        elif count:
+            state = Qt.CheckState.PartiallyChecked
+        self.select_all.setCheckState(state)  # programmatic: emits no `clicked`
+        self.select_all.setText(
+            self.t("gui.select_all_n", n=count, total=total) if count
+            else self.t("gui.select_all")
+        )
 
     def _translate_selected(self, target: str) -> None:
         queued = 0
@@ -278,7 +324,33 @@ class HistoryPage(QWidget):
             self.refresh()
 
     def _delete_selected(self) -> None:
-        self._delete_sources(set(self._selected))
+        sources = set(self._selected)
+        if len(sources) > 1 and not self._confirm_delete(len(sources)):
+            return
+        self._delete_sources(sources)
+
+    def _confirm_delete(self, count: int) -> bool:
+        """Ask before a bulk delete — select-all makes it two clicks.
+
+        Records only; the subtitles on disk are untouched. But the index
+        itself has no undo, so wiping a few hundred rows by accident is
+        worth one dialog. Buttons carry our own labels because Qt's
+        standard ones follow the system locale, not the app's language.
+        """
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(self.t("gui.history_delete"))
+        box.setText(self.t("gui.history_delete_confirm", n=count))
+        box.setInformativeText(self.t("gui.history_delete_confirm_note"))
+        delete = box.addButton(
+            self.t("gui.history_delete"), QMessageBox.ButtonRole.DestructiveRole
+        )
+        cancel = box.addButton(
+            self.t("gui.cancel"), QMessageBox.ButtonRole.RejectRole
+        )
+        box.setDefaultButton(cancel)
+        box.exec()
+        return box.clickedButton() is delete
 
     def _delete_sources(self, sources: set[str]) -> None:
         removed = self.vm.history_delete_sources(sources)
