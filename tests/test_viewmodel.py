@@ -55,21 +55,48 @@ def test_drain_applies_status_and_progress(tmp_path):
     assert any("boom" in line for line in result.log_lines)
 
 
-def test_eta_from_completed_durations(tmp_path):
-    vm = make_vm(tmp_path)
-    make_media(tmp_path, 3)
+def _running_batch(vm, tmp_path, count: int, *, elapsed: float):
+    make_media(tmp_path, count)
     vm.scan_inputs(str(tmp_path))
     vm.running = True
+    vm._batch_started = time.monotonic() - elapsed
     vm._id_map = {i: rid for i, rid in enumerate(vm.row_order, start=1)}
 
-    vm.bus.emit(StatusEvent(subject="job:1", status="transcribing"))
-    vm.drain()
-    time.sleep(0.05)
+
+def test_eta_extrapolates_wall_clock_throughput(tmp_path):
+    vm = make_vm(tmp_path)
+    _running_batch(vm, tmp_path, 4, elapsed=60.0)
+
     vm.bus.emit(StatusEvent(subject="job:1", status="done"))
-    result = vm.drain()
-    snap = result.snapshot
-    assert snap.done == 1 and snap.total == 3
-    assert snap.eta_sec is not None and snap.eta_sec > 0
+    snap = vm.drain().snapshot
+    assert snap.done == 1 and snap.total == 4
+    assert 170 < snap.eta_sec < 195   # a minute bought one file, three to go
+
+
+def test_eta_treats_instantly_skipped_files_as_cheap(tmp_path):
+    """The shape that produced a 3000-minute estimate: most files skip.
+
+    Timing transcriptions individually and multiplying by the files left
+    charged every already-subtitled file a full transcription. Wall-clock
+    throughput lets them cost what they actually cost.
+    """
+    vm = make_vm(tmp_path)
+    _running_batch(vm, tmp_path, 10, elapsed=5.0)
+
+    for job_id in range(1, 6):   # five files already had subtitles
+        vm.bus.emit(StatusEvent(subject=f"job:{job_id}", status="skipped"))
+    snap = vm.drain().snapshot
+    assert snap.done == 5
+    assert snap.eta_sec < 10     # seconds, not five full transcriptions
+
+
+def test_eta_waits_for_the_first_finished_file(tmp_path):
+    vm = make_vm(tmp_path)
+    _running_batch(vm, tmp_path, 3, elapsed=30.0)
+    vm.bus.emit(StatusEvent(subject="job:1", status="downloading"))
+    snap = vm.drain().snapshot
+    assert snap.eta_sec is None            # nothing to extrapolate from yet
+    assert snap.current_status == "downloading"   # but the row is shown as busy
 
 
 def test_batch_runs_via_fake_pipeline(tmp_path, monkeypatch):

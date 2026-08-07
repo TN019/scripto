@@ -120,9 +120,8 @@ class GuiViewModel:
 
         self.log_lines: list[str] = []
 
-        # ETA bookkeeping: wall time of completed files this batch
-        self._durations: list[float] = []
-        self._active_since: float | None = None
+        # ETA bookkeeping: when this batch started (see _snapshot)
+        self._batch_started: float | None = None
 
         # History-translation queue: one worker, jobs survive any dialog.
         self.translation_jobs: list[TranslationJob] = []
@@ -185,8 +184,7 @@ class GuiViewModel:
             self._stop.clear()
             self._final_stats = None
             self._finished_flag = False
-            self._durations = []
-            self._active_since = None
+            self._batch_started = time.monotonic()
             self._id_map = {n: ids[n - 1] for n in range(1, len(ids) + 1)}
 
         config = self.config.load()
@@ -260,7 +258,6 @@ class GuiViewModel:
                 row = self._row_for_job(int(event.subject.split(":", 1)[1]))
                 if row is None:
                     continue
-                self._track_eta(row, event.status)
                 row.status = event.status
                 row.error = event.detail
                 row.error_key = event.detail_key
@@ -298,14 +295,6 @@ class GuiViewModel:
         mapped = getattr(self, "_id_map", {}).get(job_id, job_id)
         return self.rows.get(mapped)
 
-    def _track_eta(self, row: FileRow, new_status: str) -> None:
-        now = time.monotonic()
-        if new_status == JobStatus.TRANSCRIBING.value:
-            self._active_since = now
-        elif new_status == JobStatus.DONE.value and self._active_since is not None:
-            self._durations.append(now - self._active_since)
-            self._active_since = None
-
     def _snapshot(self) -> Snapshot:
         rows = list(self.rows.values())
         terminal = {
@@ -315,15 +304,25 @@ class GuiViewModel:
         done = sum(1 for r in rows if r.status in terminal)
         active = next(
             (r for r in rows if r.status in (
-                JobStatus.TRANSCRIBING.value, JobStatus.EXTRACTING.value,
-                JobStatus.TRANSLATING.value,
+                JobStatus.DOWNLOADING.value, JobStatus.TRANSCRIBING.value,
+                JobStatus.EXTRACTING.value, JobStatus.TRANSLATING.value,
             )),
             None,
         )
+        # Wall-clock throughput, not the average of per-file transcribe times.
+        # Timing files individually measured only the stage we happened to
+        # watch and charged every remaining file a full transcription — with
+        # a half-subtitled library, where most files are skipped in
+        # milliseconds, that produced estimates in the thousands of minutes.
+        # Elapsed-over-finished counts everything the batch actually spends
+        # (iCloud downloads, extraction stalls, the one-time model load,
+        # translation running alongside) and lets cheap files pull the
+        # average down by themselves.
         eta = None
-        if self.running and self._durations:
+        if self.running and done and self._batch_started is not None:
             remaining = len(rows) - done
-            eta = sum(self._durations) / len(self._durations) * remaining
+            elapsed = time.monotonic() - self._batch_started
+            eta = elapsed / done * remaining
         return Snapshot(
             running=self.running,
             done=done,
